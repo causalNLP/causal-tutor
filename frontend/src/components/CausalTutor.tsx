@@ -8,7 +8,8 @@ import {
   Plus, PanelRightClose, PanelRightOpen,
   LayoutDashboard, X, FileText, ArrowUp,
   BrainCircuit, BookOpen, GraduationCap,
-  MessageSquare, Trash2, Maximize2, AlertTriangle, GitBranch
+  MessageSquare, Trash2, Maximize2, AlertTriangle, GitBranch,
+  CheckCircle2, HelpCircle, ChevronDown, ChevronUp
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import "katex/dist/katex.min.css";
@@ -17,11 +18,18 @@ import dynamic from "next/dynamic";
 const MermaidChart = dynamic(() => import("./MermaidChart"), { ssr: false });
 
 // Types for History
+interface ChatMessage {
+    role: "user" | "assistant";
+    content: string;
+    type?: "text" | "analysis_report"; // Distinguish standard chat from rich reports
+    data?: APIAnalysisResponse; // Payload for the report
+}
+
 interface ChatSession {
     id: string;
     title: string;
     timestamp: number;
-    messages: Array<{ role: string; content: string }>;
+    messages: ChatMessage[];
     analysis: APIAnalysisResponse | null;
 }
 
@@ -35,7 +43,7 @@ export default function CausalTutor() {
   const [input, setInput] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useState<Array<{ role: string; content: string }>>([]);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [analysis, setAnalysis] = useState<APIAnalysisResponse | null>(null);
   
   // Session Management
@@ -155,7 +163,7 @@ export default function CausalTutor() {
         const userDisplayMsg = file ? `Analyzing file: **${file.name}**` : input;
         
         // Optimistic UI update
-        const newHistory = [...chatHistory, { role: "user", content: userDisplayMsg }];
+        const newHistory: ChatMessage[] = [...chatHistory, { role: "user", content: userDisplayMsg, type: "text" }];
         setChatHistory(newHistory);
         setInput("");
 
@@ -175,11 +183,14 @@ export default function CausalTutor() {
 
         const analysisData = response.data;
         setAnalysis(analysisData);
-        setIsContextPanelOpen(true);
+        setIsContextPanelOpen(false); // Do not open sidebar anymore
         
-        const assistantMsg = { 
+        // Push RICH REPORT message
+        const assistantMsg: ChatMessage = { 
             role: "assistant", 
-            content: `I've analyzed the ${file ? 'paper' : 'scenario'}. \n\n### Core Causal Query\n> *${analysisData.analysis.causal_query}*\n\nI've evaluated the methodology, identified key assumptions, and generated a **Causal Graph (DAG)**. \n\nCheck the **Context Panel** on the right for a critique of the study design and alternative methods considered.` 
+            content: "", // Content is handled by the type renderer
+            type: "analysis_report",
+            data: analysisData
         };
         
         const updatedHistory = [...newHistory, assistantMsg];
@@ -203,7 +214,7 @@ export default function CausalTutor() {
         }
 
         const userMsg = input;
-        const newHistory = [...chatHistory, { role: "user", content: userMsg }];
+        const newHistory: ChatMessage[] = [...chatHistory, { role: "user", content: userMsg, type: "text" }];
         setChatHistory(newHistory);
         setInput("");
 
@@ -221,7 +232,7 @@ export default function CausalTutor() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               message: userMsg,
-              history: chatHistory,
+              history: chatHistory.map(m => ({ role: m.role, content: m.content })), // Send raw content
               paper_text: analysis.full_text,
               analysis_context: analysisContext
             }),
@@ -234,7 +245,7 @@ export default function CausalTutor() {
         let assistantMessage = "";
 
         // Add placeholder for streaming
-        setChatHistory([...newHistory, { role: "assistant", content: "" }]);
+        setChatHistory([...newHistory, { role: "assistant", content: "", type: "text" }]);
 
         while (true) {
             const { done, value } = await reader.read();
@@ -244,19 +255,19 @@ export default function CausalTutor() {
             
             setChatHistory(prev => {
               const updated = [...prev];
-              updated[updated.length - 1] = { role: "assistant", content: assistantMessage };
+              updated[updated.length - 1] = { role: "assistant", content: assistantMessage, type: "text" };
               return updated;
             });
         }
 
         // Final update to session
         updateSession(sessionId, { 
-            messages: [...newHistory, { role: "assistant", content: assistantMessage }] 
+            messages: [...newHistory, { role: "assistant", content: assistantMessage, type: "text" }] 
         });
       }
     } catch (error) {
       console.error(error);
-      setChatHistory(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error processing your request. Please try again." }]);
+      setChatHistory(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error processing your request. Please try again.", type: "text" }]);
     } finally {
       setLoading(false);
     }
@@ -355,7 +366,7 @@ export default function CausalTutor() {
                         className={`p-2 rounded-lg transition-all flex items-center gap-2 text-sm font-medium border ${isContextPanelOpen ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-white hover:bg-slate-50 text-slate-500 border-slate-200 shadow-sm'}`}
                     >
                         <LayoutDashboard size={16} />
-                        <span className="hidden md:inline">Context Panel</span>
+                        <span className="hidden md:inline">Graph & Methods</span>
                     </button>
                 )}
             </div>
@@ -363,7 +374,7 @@ export default function CausalTutor() {
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth flex flex-col w-full">
-            <div className="flex-1 w-full max-w-3xl mx-auto px-4 md:px-0 pt-6 pb-4">
+            <div className="flex-1 w-full max-w-4xl mx-auto px-4 md:px-6 pt-6 pb-4">
                 
                 {chatHistory.length === 0 ? (
                     // EMPTY STATE
@@ -397,7 +408,7 @@ export default function CausalTutor() {
                     // CHAT MESSAGES
                     <div className="space-y-10 pb-4 w-full">
                         {chatHistory.map((msg, idx) => (
-                            <div key={idx} className="flex gap-4 md:gap-6 group w-full px-4 md:px-0">
+                            <div key={idx} className="flex gap-4 md:gap-6 group w-full animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <div className="w-8 h-8 flex-shrink-0 mt-1">
                                     {msg.role === 'assistant' ? (
                                         <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shadow-md ring-2 ring-white">
@@ -409,21 +420,27 @@ export default function CausalTutor() {
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex-1 min-w-0 space-y-2">
                                     <div className="font-semibold text-sm text-slate-900 mb-1">
                                         {msg.role === 'assistant' ? 'Causal Tutor' : 'You'}
                                     </div>
-                                    <div className="prose prose-slate prose-p:leading-7 prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 max-w-none text-[15px] text-slate-800 break-words font-normal">
-                                        <ReactMarkdown 
-                                            components={{
-                                                code: ({node, ...props}) => <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-sm font-mono border border-slate-200" {...props} />,
-                                                h3: ({node, ...props}) => <h3 className="text-lg font-bold text-slate-900 mt-4 mb-2" {...props} />,
-                                                blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-indigo-200 pl-4 italic text-slate-600 my-2" {...props} />
-                                            }}
-                                        >
-                                            {msg.content}
-                                        </ReactMarkdown>
-                                    </div>
+                                    
+                                    {/* RENDER DIFFERENT TYPES */}
+                                    {msg.type === 'analysis_report' && msg.data ? (
+                                        <AnalysisReportBlock data={msg.data} />
+                                    ) : (
+                                        <div className="prose prose-slate prose-p:leading-7 prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 max-w-none text-[15px] text-slate-800 break-words font-normal">
+                                            <ReactMarkdown 
+                                                components={{
+                                                    code: ({node, ...props}) => <code className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-sm font-mono border border-slate-200" {...props} />,
+                                                    h3: ({node, ...props}) => <h3 className="text-lg font-bold text-slate-900 mt-4 mb-2" {...props} />,
+                                                    blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-indigo-200 pl-4 italic text-slate-600 my-2" {...props} />
+                                                }}
+                                            >
+                                                {msg.content}
+                                            </ReactMarkdown>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -510,15 +527,15 @@ export default function CausalTutor() {
         </div>
       </div>
 
-      {/* 4. CONTEXT PANEL (Right Sidebar) */}
-      <div className={`${isContextPanelOpen && analysis ? 'w-[400px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0'} bg-slate-50 border-l border-slate-200 flex-shrink-0 flex flex-col h-full shadow-2xl z-40 transition-all duration-300 ease-in-out fixed right-0 md:relative overflow-hidden`}>
-          <div className="flex flex-col h-full min-w-[400px]"> {/* Fixed width container */}
+      {/* 4. CONTEXT PANEL (SIMPLIFIED - Only Graph & List) */}
+      <div className={`${isContextPanelOpen && analysis ? 'w-[350px] translate-x-0 opacity-100' : 'w-0 translate-x-full opacity-0'} bg-slate-50 border-l border-slate-200 flex-shrink-0 flex flex-col h-full shadow-2xl z-40 transition-all duration-300 ease-in-out fixed right-0 md:relative overflow-hidden`}>
+          <div className="flex flex-col h-full min-w-[350px]"> {/* Fixed width container */}
              <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white/80 backdrop-blur-sm sticky top-0 z-10">
                  <div className="flex items-center gap-2 text-slate-800">
-                    <div className="p-1.5 bg-indigo-50 rounded-md text-indigo-600">
+                    {/* <div className="p-1.5 bg-indigo-50 rounded-md text-indigo-600">
                         <LayoutDashboard size={16} />
-                    </div>
-                    <h3 className="font-bold text-sm">Context & Methods</h3>
+                    </div> */}
+                    <h3 className="font-bold text-sm">Visual Context</h3>
                  </div>
                  <button onClick={() => setIsContextPanelOpen(false)} className="p-1.5 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-colors">
                      <X size={18} />
@@ -526,122 +543,37 @@ export default function CausalTutor() {
              </div>
              
              {analysis && (
-                 <div className="flex-1 overflow-y-auto p-6 custom-scrollbar space-y-8 bg-slate-50/50">
-                     {/* DAG Card */}
+                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6 bg-slate-50/50">
+                     {/* DAG Card (Keep in Sidebar) */}
                      {analysis.analysis.causal_graph_mermaid && (
-                         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow group relative">
-                             <div className="flex items-center justify-between mb-4">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Causal Graph (DAG)</h4>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <button 
-                                        onClick={() => setIsGraphModalOpen(true)}
-                                        className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors"
-                                        title="Maximize Graph"
-                                    >
-                                        <Maximize2 size={14} />
-                                    </button>
-                                    <span className="text-[10px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full font-medium border border-slate-200">Mermaid.js</span>
-                                </div>
+                         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group relative">
+                             <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Causal Graph</h4>
+                                <button 
+                                    onClick={() => setIsGraphModalOpen(true)}
+                                    className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-indigo-600 transition-colors"
+                                    title="Maximize"
+                                >
+                                    <Maximize2 size={14} />
+                                </button>
                              </div>
-                             <div className="bg-white rounded-xl p-3 flex justify-center overflow-hidden border border-slate-100 shadow-inner max-h-[250px] cursor-pointer" onClick={() => setIsGraphModalOpen(true)}>
+                             <div className="bg-white rounded-lg p-2 flex justify-center overflow-hidden border border-slate-100 shadow-inner max-h-[200px] cursor-pointer" onClick={() => setIsGraphModalOpen(true)}>
                                 <MermaidChart chart={analysis.analysis.causal_graph_mermaid} />
                              </div>
                          </div>
                      )}
-
-                     {/* Methods List with Critique */}
+                     
+                     {/* Simplified Method List (Just Titles) */}
                      <div>
-                        <div className="flex items-center gap-2 mb-4 px-1">
-                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
-                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Analysis & Critique</h4>
-                        </div>
-                        
-                        <div className="space-y-6">
-                            {analysis.analysis.methods.map((method, idx) => (
-                                <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:border-indigo-200 hover:shadow-lg transition-all cursor-default group relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                    
-                                    {/* Method Name */}
-                                    <div className="flex items-center justify-between mb-3 pl-2">
-                                        <h4 className="font-bold text-slate-800 text-sm group-hover:text-indigo-700 transition-colors">{method.method_name}</h4>
-                                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-bold uppercase rounded-full border border-indigo-100">Chosen Method</span>
-                                    </div>
-                                    
-                                    {/* Selection Rationale */}
-                                    <p className="text-xs text-slate-600 leading-relaxed mb-4 pl-2 border-l border-slate-100 group-hover:border-indigo-100 transition-colors">
-                                        {method.method_selection_summary.substring(0, 200)}...
-                                    </p>
-
-                                    {/* Critique Section (New) */}
-                                    {method.critique && (
-                                        <div className="mb-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-                                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 uppercase mb-1">
-                                                <AlertTriangle size={12} /> Critique & Threats
-                                            </div>
-                                            <p className="text-xs text-slate-700 leading-relaxed">{method.critique}</p>
-                                        </div>
-                                    )}
-                                    
-                                    {/* Assumptions (New) */}
-                                    {method.assumptions && method.assumptions.length > 0 && (
-                                        <div className="mb-4 pl-2">
-                                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Assumptions</div>
-                                            <ul className="list-disc list-inside text-xs text-slate-600 space-y-0.5">
-                                                {method.assumptions.slice(0,3).map((ass, i) => (
-                                                    <li key={i}>{ass}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-
-                                    {/* Evidence */}
-                                    {method.cited_paragraphs.length > 0 && (
-                                        <div className="bg-slate-50/80 -mx-5 -mb-5 px-5 py-4 border-t border-slate-100 group-hover:bg-indigo-50/30 transition-colors">
-                                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase mb-2">
-                                                <FileText size={12} className="text-indigo-500" /> Evidence
-                                            </div>
-                                            <div className="space-y-2">
-                                                {method.cited_paragraphs.slice(0, 2).map((cite, i) => (
-                                                    <div key={i} className="text-[11px] text-slate-600 italic bg-white p-2 rounded-lg border border-slate-200/60 shadow-sm">
-                                                        "{cite.text.substring(0, 80)}..."
-                                                        <span className="text-[9px] not-italic font-bold text-slate-400 ml-1 bg-slate-100 px-1 rounded">P.{cite.page}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 px-1">Detected Methods</div>
+                        <div className="space-y-2">
+                            {analysis.analysis.methods.map((m, i) => (
+                                <div key={i} className="bg-white px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 shadow-sm">
+                                    {m.method_name}
                                 </div>
                             ))}
                         </div>
                      </div>
-
-                     {/* Alternative Methods (New) */}
-                     {analysis.analysis.alternative_methods && analysis.analysis.alternative_methods.length > 0 && (
-                         <div>
-                            <div className="flex items-center gap-2 mb-4 px-1">
-                                <div className="w-1.5 h-1.5 rounded-full bg-pink-500"></div>
-                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Alternative Approaches</h4>
-                            </div>
-                            <div className="space-y-3">
-                                {analysis.analysis.alternative_methods.map((alt, idx) => (
-                                    <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:border-pink-200 transition-colors">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <GitBranch size={14} className="text-pink-500" />
-                                            <h4 className="font-bold text-slate-800 text-xs">{alt.method_name}</h4>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <p className="text-[11px] text-slate-600 leading-snug"><strong className="text-slate-900">Why considered:</strong> {alt.feasibility}</p>
-                                            <p className="text-[11px] text-slate-600 leading-snug"><strong className="text-slate-900">Trade-off:</strong> {alt.trade_off}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                         </div>
-                     )}
-
                  </div>
              )}
           </div>
@@ -681,6 +613,99 @@ export default function CausalTutor() {
 
     </div>
   );
+}
+
+// --- SUB-COMPONENTS ---
+
+function AnalysisReportBlock({ data }: { data: APIAnalysisResponse }) {
+    return (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-500">
+            {/* Header */}
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Analysis Report</span>
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 leading-snug">{data.analysis.paper_name || "Scenario Analysis"}</h3>
+            </div>
+
+            {/* Core Query */}
+            <div className="px-6 py-5">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Core Causal Query</h4>
+                <p className="text-sm text-slate-800 font-medium italic border-l-4 border-indigo-500 pl-4 py-1 leading-relaxed bg-slate-50 rounded-r-lg">
+                    {data.analysis.causal_query}
+                </p>
+            </div>
+
+            {/* Methods & Critique (Rich Content moved from Sidebar) */}
+            <div className="px-6 pb-6 space-y-6">
+                {data.analysis.methods.map((method, idx) => (
+                    <div key={idx} className="space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 font-bold text-xs">{idx + 1}</div>
+                                <span className="font-bold text-slate-800">{method.method_name}</span>
+                            </div>
+                        </div>
+                        
+                        <p className="text-sm text-slate-600 leading-relaxed">
+                            {method.method_selection_summary}
+                        </p>
+
+                        {/* Assumptions Grid */}
+                        {method.assumptions && method.assumptions.length > 0 && (
+                            <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Key Assumptions</span>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {method.assumptions.map((ass, i) => (
+                                        <div key={i} className="flex items-start gap-2">
+                                            <CheckCircle2 size={14} className="text-emerald-500 mt-0.5 flex-shrink-0" />
+                                            <span className="text-xs text-slate-700 leading-tight">{ass}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Critique Box */}
+                        {method.critique && (
+                            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-amber-700 font-bold text-xs uppercase mb-1">
+                                    <AlertTriangle size={14} /> Critique & Threats
+                                </div>
+                                <p className="text-xs text-slate-800 leading-relaxed">
+                                    {method.critique}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+                ))}
+
+                {/* Alternatives */}
+                {data.analysis.alternative_methods && data.analysis.alternative_methods.length > 0 && (
+                    <div className="pt-2">
+                        <div className="flex items-center gap-2 mb-3">
+                            <GitBranch size={16} className="text-pink-500" />
+                            <span className="font-bold text-sm text-slate-700">Alternative Approaches</span>
+                        </div>
+                        <div className="space-y-2">
+                            {data.analysis.alternative_methods.map((alt, i) => (
+                                <div key={i} className="text-xs border-l-2 border-pink-200 pl-3 py-1">
+                                    <span className="font-semibold text-slate-800">{alt.method_name}: </span>
+                                    <span className="text-slate-600">{alt.feasibility}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+            {/* Footer / CTA */}
+            <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 text-[11px] text-slate-500 flex justify-between items-center">
+                <span>Generated by Causal Tutor AI</span>
+                <span className="flex items-center gap-1"><BrainCircuit size={12} /> Pro Analysis</span>
+            </div>
+        </div>
+    );
 }
 
 function SuggestionCard({ icon, title, subtitle, onClick }: { icon: React.ReactNode, title: string, subtitle: string, onClick: () => void }) {
