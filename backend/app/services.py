@@ -20,7 +20,7 @@ if not api_key:
 
 client = AsyncOpenAI(api_key=api_key)
 
-async def generate_exam_questions(method_name: str, num_questions: int = 3) -> ExamResponse:
+async def generate_exam_questions(method_name: str, num_questions: int = 5) -> ExamResponse:
     # Use OpenAI to generate questions based on the method
     prompt = f"""Generate {num_questions} multiple-choice exam questions to test a student's understanding of: {method_name}.
     
@@ -43,7 +43,7 @@ async def generate_exam_questions(method_name: str, num_questions: int = 3) -> E
     ]
     
     completion = await client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5-mini", # Faster and cheaper model for simple generation tasks
         messages=[{"role": "user", "content": prompt}],
         tools=tools,
         tool_choice={"type": "function", "function": {"name": "provide_exam_questions"}}
@@ -124,20 +124,21 @@ async def analyze_paper(text: str, filename: str) -> CausalQueryResponse:
     ]
     
     completion = await client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-5-mini",
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Analyze the following text/paper: {filename}\n\n{text[:100000]}"} 
         ],
         tools=tools,
-        tool_choice={"type": "function", "function": {"name": "provide_causal_analysis"}}
+        tool_choice={"type": "function", "function": {"name": "provide_causal_analysis"}},
+        reasoning_effort="low"
     )
     
     tool_call = completion.choices[0].message.tool_calls[0]
     function_args = json.loads(tool_call.function.arguments)
     return CausalQueryResponse(**function_args)
 
-async def chat_with_paper(paper_text: str, analysis_context: Optional[str], messages: List[dict], model: str = "gpt-4o"):
+async def chat_with_paper(paper_text: str, analysis_context: Optional[str], messages: List[dict], model: str = "gpt-5.2"):
     system_prompt_content = f"""You are a helpful and Socratic Causal Tutor. Your goal is to help students understand the causal inference methods used in the provided research paper or scenario.
 
 Current Analysis Context:
@@ -169,6 +170,7 @@ Instructions for Tutor:
     completion = await client.chat.completions.create(
         model=model,
         messages=formatted_messages,
-        stream=True
+        stream=True,
+        reasoning_effort="low"
     )
     return completion
