@@ -7,7 +7,7 @@ import {
   Loader2, Paperclip, Bot, User,
   Plus, PanelRightClose, PanelRightOpen,
   LayoutDashboard, X, FileText, ArrowUp,
-  BrainCircuit, BookOpen, GraduationCap, Share2,
+  BrainCircuit, BookOpen, GraduationCap, Share2, Database,
   MessageSquare, Trash2, Maximize2, AlertTriangle, GitBranch,
   CheckCircle2, HelpCircle, ChevronDown, ChevronUp
 } from "lucide-react";
@@ -33,7 +33,7 @@ interface ChatSession {
     analysis: APIAnalysisResponse | null;
 }
 
-export default function CausalTutor({ onOpenPlayground }: { onOpenPlayground?: () => void }) {
+export default function CausalTutor({ onOpenPlayground, onOpenSandbox }: { onOpenPlayground?: () => void; onOpenSandbox?: () => void }) {
   // State
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
@@ -407,6 +407,12 @@ export default function CausalTutor({ onOpenPlayground }: { onOpenPlayground?: (
                                 title="DAG Playground"
                                 subtitle="Build and analyze causal graphs"
                                 onClick={() => onOpenPlayground?.()}
+                            />
+                            <SuggestionCard
+                                icon={<Database size={20} className="text-cyan-500" />}
+                                title="Dataset Sandbox"
+                                subtitle="Run causal methods on actual data"
+                                onClick={() => onOpenSandbox?.()}
                             />
                         </div>
                     </div>

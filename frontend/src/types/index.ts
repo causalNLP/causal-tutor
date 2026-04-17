@@ -76,3 +76,130 @@ export interface DAGAnalysisResult {
   suggested_adjustments: string[];
   faithfulness_notes: string;
 }
+
+// ── Dataset Sandbox Types ────────────────────────────────────────────────
+
+export interface SandboxQuery {
+  id: string;
+  title: string;
+  concept_highlight: string;
+  query: string;
+  dataset_description: string;
+  method: string;
+  dataset_path: string;
+  effect: number;
+  treatment_var: string;
+  outcome_var: string;
+  control_variables: string[];
+  instrument_var: string | null;
+  running_var: string | null;
+  cutoff: number | null;
+  temporal_var: string | null;
+  state_var: string | null;
+  mediator_var: string | null;
+  domain: string;
+}
+
+export interface QueriesResponse {
+  queries: SandboxQuery[];
+}
+
+export interface SandboxDatasetPreview {
+  columns: string[];
+  dtypes: string[];
+  n_rows: number;
+  sample_rows: Record<string, unknown>[];
+}
+
+export interface VariableSelection {
+  treatment: string;
+  outcome: string;
+  controls: string[];
+  instrument?: string | null;
+  running_var?: string | null;
+  cutoff?: number | null;
+  temporal_var?: string | null;
+  state_var?: string | null;
+  mediator?: string | null;
+}
+
+export interface GroundTruthComparison {
+  effect: number;
+  delta: number | null;
+  within_ci: boolean | null;
+}
+
+export interface ForestTerm {
+  name: string;
+  coef: number;
+  ci_low: number;
+  ci_high: number;
+  is_treatment: boolean;
+}
+
+export interface ForestPlotData {
+  terms: ForestTerm[];
+}
+
+export interface ParallelTrendsPlotData {
+  periods: (number | string)[];
+  treated_mean: number[];
+  control_mean: number[];
+  treatment_start: number;
+  diagnostics: {
+    slope_treated?: number;
+    slope_control?: number;
+    delta?: number;
+    pooled_sd?: number;
+  };
+}
+
+export interface FirstStagePlotData {
+  scatter: { z: number; t: number }[];
+  fit_line: { z: number; t_hat: number }[];
+  f_stat: number;
+  instrument: string;
+  treatment: string;
+}
+
+export interface DiscontinuityPlotData {
+  scatter: { r: number; y: number }[];
+  left_fit: { r: number; y: number }[];
+  right_fit: { r: number; y: number }[];
+  cutoff: number;
+  bandwidth: number;
+  running_var: string;
+  outcome_var: string;
+}
+
+export interface CovariateBalancePlotData {
+  covariates: string[];
+  smd_before: { covariate: string; smd: number }[];
+  smd_after: { covariate: string; smd: number }[];
+  threshold: number;
+}
+
+export interface MediationPlotData {
+  treatment: string;
+  mediator: string;
+  outcome: string;
+  t_to_m: number;
+  m_to_y: number;
+  t_to_y_direct: number;
+  indirect: number;
+}
+
+export interface EstimateResponse {
+  method: string;
+  estimate: number | null;
+  std_error: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  p_value: number | null;
+  n_obs: number;
+  ground_truth: GroundTruthComparison;
+  warnings: string[];
+  assumptions: string[];
+  plot_type: string;
+  plot_data: Record<string, unknown>;
+}

@@ -17,6 +17,15 @@ from .dag_models import (
     DAGChatRequest,
 )
 from .dag_services import validate_dag, check_d_separation, find_all_paths, analyze_dag_with_gpt, chat_about_dag
+from .sandbox_models import (
+    QueriesResponse, DatasetPreview,
+    EstimateRequest, EstimateResponse,
+    InterpretRequest,
+)
+from .sandbox_services import (
+    load_queries, preview_dataset, estimate as sandbox_estimate,
+    interpret_result,
+)
 
 load_dotenv()
 
@@ -206,6 +215,59 @@ async def dag_chat(request: DAGChatRequest):
                 request.graph,
                 request.history + [{"role": "user", "content": request.message}],
             )
+            async for chunk in stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
+
+        return StreamingResponse(generate(), media_type="text/event-stream")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Dataset Sandbox Endpoints ─────────────────────────────────────────────
+
+@app.get("/sandbox/queries", response_model=QueriesResponse)
+async def sandbox_queries():
+    try:
+        return QueriesResponse(queries=load_queries())
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/sandbox/dataset", response_model=DatasetPreview)
+async def sandbox_dataset(id: str, limit: int = 50):
+    try:
+        return preview_dataset(id, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/sandbox/estimate", response_model=EstimateResponse)
+async def sandbox_estimate_endpoint(request: EstimateRequest):
+    try:
+        return sandbox_estimate(request.id, request.method, request.variables)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/sandbox/interpret")
+async def sandbox_interpret(request: InterpretRequest):
+    try:
+        async def generate():
+            stream = await interpret_result(request)
             async for chunk in stream:
                 content = chunk.choices[0].delta.content
                 if content:

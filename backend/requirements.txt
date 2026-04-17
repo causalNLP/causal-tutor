@@ -7,4 +7,9 @@ pydantic
 python-dotenv
 tiktoken
 pandas
-networkx
+networkx>=3.0
+statsmodels>=0.14
+linearmodels>=5.4
+scikit-learn>=1.3
+numpy
+scipy
