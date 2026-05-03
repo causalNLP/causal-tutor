@@ -744,7 +744,7 @@ function SuggestionCard({ icon, title, subtitle, onClick }: { icon: React.ReactN
     return (
         <button 
             onClick={onClick}
-            className="flex flex-col items-start p-5 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 hover:border-slate-300 hover:shadow-md transition-all text-left shadow-sm group w-full sm:w-[calc(50%-0.5rem)] md:w-[220px] relative overflow-hidden"
+            className="flex flex-col items-start p-5 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 hover:border-slate-300 hover:shadow-md transition-all text-left shadow-sm group w-full sm:w-[calc(50%-0.5rem)] md:w-[260px] relative overflow-hidden"
         >
             <div className="mb-3 p-2 bg-slate-50 rounded-xl group-hover:bg-white group-hover:scale-110 transition-all duration-300 border border-slate-100 shadow-sm">{icon}</div>
             <div className="font-bold text-sm text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{title}</div>
