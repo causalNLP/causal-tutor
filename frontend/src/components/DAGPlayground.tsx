@@ -35,6 +35,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   RotateCcw,
+  Target,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import axios from "axios";
@@ -45,8 +46,10 @@ import type {
   PathsResponse,
   DSeparationResult,
   DAGAnalysisResult,
+  CausalAnalysisResult,
 } from "@/types";
 import DAGChatPanel from "./DAGChatPanel";
+import CausalAnalysisPanel from "./CausalAnalysisPanel";
 
 // ── Custom Node ──────────────────────────────────────────────────────────
 
@@ -55,9 +58,10 @@ function DAGNode({ data, selected }: NodeProps) {
   const isConditioned = data.isConditioned as boolean;
   const isHighlighted = data.isHighlighted as boolean;
   const highlightColor = data.highlightColor as string | undefined;
+  const role = data.role as ("T" | "Y" | "Z" | undefined);
 
   let classes =
-    "px-4 py-2 shadow-sm font-medium text-sm transition-all duration-200 min-w-[80px] text-center ";
+    "relative px-4 py-2 shadow-sm font-medium text-sm transition-all duration-200 min-w-[80px] text-center ";
 
   if (isLatent) {
     classes += "rounded-full border-2 border-dashed border-slate-400 bg-slate-50 text-slate-600 ";
@@ -65,9 +69,15 @@ function DAGNode({ data, selected }: NodeProps) {
     classes += "rounded-xl border-2 border-slate-300 bg-white text-slate-800 ";
   }
 
-  if (isConditioned) {
-    classes += "!border-amber-400 !bg-amber-50 ";
+  // Role-based styling (persistent T/Y/Z badges) - takes precedence over conditioned
+  if (role === "T") {
+    classes += "!border-indigo-500 !bg-indigo-50 ring-2 ring-indigo-100 ";
+  } else if (role === "Y") {
+    classes += "!border-rose-500 !bg-rose-50 ring-2 ring-rose-100 ";
+  } else if (role === "Z" || isConditioned) {
+    classes += "!border-amber-400 !bg-amber-50 ring-2 ring-amber-100 ";
   }
+
   if (isHighlighted && highlightColor === "source") {
     classes += "!border-emerald-500 !bg-emerald-50 ring-2 ring-emerald-200 ";
   } else if (isHighlighted && highlightColor === "target") {
@@ -80,6 +90,12 @@ function DAGNode({ data, selected }: NodeProps) {
     classes += "ring-2 ring-indigo-400 !border-indigo-400 ";
   }
 
+  // Role badge styling
+  let badgeClasses = "";
+  if (role === "T") badgeClasses = "bg-indigo-600 text-white";
+  else if (role === "Y") badgeClasses = "bg-rose-600 text-white";
+  else if (role === "Z") badgeClasses = "bg-amber-500 text-white";
+
   return (
     <div className={classes}>
       <Handle
@@ -88,6 +104,11 @@ function DAGNode({ data, selected }: NodeProps) {
         className="!w-3 !h-3 !bg-slate-400 !border-2 !border-white hover:!bg-indigo-500 transition-colors"
       />
       <span>{data.label as string}</span>
+      {role && (
+        <span className={`absolute -top-2 -right-2 ${badgeClasses} text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm border-2 border-white`}>
+          {role}
+        </span>
+      )}
       <Handle
         type="source"
         position={Position.Bottom}
@@ -145,6 +166,15 @@ export default function DAGPlayground() {
   const [showEdgePanel, setShowEdgePanel] = useState(false);
   const [selectedEdgeLabel, setSelectedEdgeLabel] = useState("");
 
+  // ── Causal Analysis (persistent T/Y/Z roles + backdoor analysis) ──
+  const [causalPanelOpen, setCausalPanelOpen] = useState(false);
+  const [treatmentId, setTreatmentId] = useState<string | null>(null);
+  const [outcomeId, setOutcomeId] = useState<string | null>(null);
+  const [confounderIds, setConfounderIds] = useState<string[]>([]);
+  const [assignMode, setAssignMode] = useState<"T" | "Y" | "Z" | null>(null);
+  const [causalResult, setCausalResult] = useState<CausalAnalysisResult | null>(null);
+  const [causalLoading, setCausalLoading] = useState(false);
+
   // ── Toast helper ──
 
   const showToast = useCallback((msg: string) => {
@@ -157,6 +187,108 @@ export default function DAGPlayground() {
   useEffect(() => {
     if (showAddNode) addNodeInputRef.current?.focus();
   }, [showAddNode]);
+
+  // ── Sync T/Y/Z roles into node data so badges render ──
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        let role: "T" | "Y" | "Z" | undefined;
+        if (n.id === treatmentId) role = "T";
+        else if (n.id === outcomeId) role = "Y";
+        else if (confounderIds.includes(n.id)) role = "Z";
+        // Avoid unnecessary re-renders if role unchanged
+        if (n.data.role === role) return n;
+        return { ...n, data: { ...n.data, role } };
+      })
+    );
+  }, [treatmentId, outcomeId, confounderIds, setNodes]);
+
+  // ── Apply causal-analysis edge styling when result arrives (or clear when null) ──
+  useEffect(() => {
+    if (!causalResult) {
+      setEdges((eds) =>
+        eds.map((e) => ({
+          ...e,
+          animated: false,
+          style: { ...e.style, stroke: undefined, strokeWidth: undefined, strokeDasharray: undefined, opacity: undefined },
+        }))
+      );
+      return;
+    }
+    // Build per-edge style map. Priority order:
+    //  - blocked (any path) → light gray dashed
+    //  - directed open → emerald solid
+    //  - backdoor open → rose solid animated
+    const blockedSet = new Set<string>();
+    const directedOpenSet = new Set<string>();
+    const backdoorOpenSet = new Set<string>();
+
+    causalResult.paths.forEach((p) => {
+      for (let i = 0; i < p.path.length - 1; i++) {
+        const a = p.path[i];
+        const b = p.path[i + 1];
+        const eid1 = `e-${a}-${b}`;
+        const eid2 = `e-${b}-${a}`;
+        if (p.is_blocked) {
+          blockedSet.add(eid1);
+          blockedSet.add(eid2);
+        } else if (p.path_type === "directed") {
+          directedOpenSet.add(eid1);
+          directedOpenSet.add(eid2);
+        } else {
+          backdoorOpenSet.add(eid1);
+          backdoorOpenSet.add(eid2);
+        }
+      }
+    });
+
+    setEdges((eds) =>
+      eds.map((e) => {
+        // Open paths take precedence over blocked classification when an edge appears in both
+        if (backdoorOpenSet.has(e.id)) {
+          return { ...e, animated: true, style: { stroke: "#f43f5e", strokeWidth: 2.5 } };
+        }
+        if (directedOpenSet.has(e.id)) {
+          return { ...e, animated: false, style: { stroke: "#10b981", strokeWidth: 2.5 } };
+        }
+        if (blockedSet.has(e.id)) {
+          return { ...e, animated: false, style: { stroke: "#cbd5e1", strokeWidth: 1.5, strokeDasharray: "5 5", opacity: 0.6 } };
+        }
+        return e;
+      })
+    );
+  }, [causalResult, setEdges]);
+
+  // ── Causal analysis runner ──
+  const runCausalAnalysis = useCallback(async () => {
+    if (!treatmentId || !outcomeId) return;
+    setCausalLoading(true);
+    try {
+      const graph = toGraphPayload(nodes, edges);
+      const latentNodes = nodes.filter((n) => n.data.isLatent).map((n) => n.id);
+      const res = await axios.post<CausalAnalysisResult>(
+        "http://localhost:8000/dag/causal-analysis",
+        {
+          graph,
+          treatment: treatmentId,
+          outcome: outcomeId,
+          conditioning_set: confounderIds,
+          latent_nodes: latentNodes,
+        }
+      );
+      setCausalResult(res.data);
+    } catch (err) {
+      console.error(err);
+      showToast("Failed to run causal analysis");
+    } finally {
+      setCausalLoading(false);
+    }
+  }, [treatmentId, outcomeId, confounderIds, nodes, edges, showToast]);
+
+  // ── Clear causal result (the useEffect above resets edge styling) ──
+  const clearCausalResult = useCallback(() => {
+    setCausalResult(null);
+  }, []);
 
   // ── Node label lookup ──
 
@@ -271,6 +403,12 @@ export default function DAGPlayground() {
     setInteractionMode("default");
     resetNodeHighlights();
     resetEdgeHighlights();
+    // Causal analysis roles + result
+    setTreatmentId(null);
+    setOutcomeId(null);
+    setConfounderIds([]);
+    setCausalResult(null);
+    setAssignMode(null);
   };
 
   // ── Reset visual highlights ──
@@ -327,6 +465,32 @@ export default function DAGPlayground() {
 
   const onNodeClick = useCallback(
     async (_: React.MouseEvent, node: Node) => {
+      // Role-assignment: pick T/Y/Z by clicking on the canvas
+      if (assignMode) {
+        if (assignMode === "T") {
+          // If this node is currently Y or Z, remove it from those roles first
+          if (node.id === outcomeId) setOutcomeId(null);
+          if (confounderIds.includes(node.id)) setConfounderIds((cs) => cs.filter((c) => c !== node.id));
+          setTreatmentId(node.id);
+          setCausalResult(null);
+        } else if (assignMode === "Y") {
+          if (node.id === treatmentId) setTreatmentId(null);
+          if (confounderIds.includes(node.id)) setConfounderIds((cs) => cs.filter((c) => c !== node.id));
+          setOutcomeId(node.id);
+          setCausalResult(null);
+        } else if (assignMode === "Z") {
+          if (node.id === treatmentId || node.id === outcomeId) {
+            showToast("Treatment and outcome can't be confounders");
+            return;
+          }
+          setConfounderIds((cs) =>
+            cs.includes(node.id) ? cs.filter((c) => c !== node.id) : [...cs, node.id]
+          );
+          setCausalResult(null);
+        }
+        return;
+      }
+
       if (interactionMode === "path_select") {
         // Path selection mode
         if (!selectedNodeForPath) {
@@ -548,6 +712,10 @@ export default function DAGPlayground() {
   // ── Status bar text ──
 
   const statusText = useMemo(() => {
+    if (assignMode) {
+      const roleLabel = assignMode === "T" ? "Treatment" : assignMode === "Y" ? "Outcome" : "Confounder";
+      return `Click a node to ${assignMode === "Z" ? "toggle as" : "set as"} ${roleLabel}`;
+    }
     if (interactionMode === "path_select") {
       return selectedNodeForPath
         ? `Click a second node to find all paths from ${nodeLabels[selectedNodeForPath] || selectedNodeForPath}`
@@ -559,7 +727,7 @@ export default function DAGPlayground() {
       return `Testing d-sep: ${nodeLabels[dSepNodeA!]} \u22A5 ${nodeLabels[dSepNodeB!]}. Click nodes to condition on them.`;
     }
     return null;
-  }, [interactionMode, selectedNodeForPath, dSepStage, dSepNodeA, dSepNodeB, nodeLabels]);
+  }, [assignMode, interactionMode, selectedNodeForPath, dSepStage, dSepNodeA, dSepNodeB, nodeLabels]);
 
   return (
     <div className="flex h-full w-full bg-white overflow-hidden">
@@ -666,6 +834,18 @@ export default function DAGPlayground() {
             D-Separation
           </button>
 
+          {/* Causal Analysis (T/Y/Z + backdoor) */}
+          <button
+            onClick={() => setCausalPanelOpen(!causalPanelOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm border ${
+              causalPanelOpen
+                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+            }`}
+          >
+            <Target size={14} /> Causal Analysis
+          </button>
+
           <div className="h-6 w-px bg-slate-200 mx-1" />
 
           {/* Check my DAG */}
@@ -708,7 +888,13 @@ export default function DAGPlayground() {
             <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
             {statusText}
             <button
-              onClick={clearAllAnalysis}
+              onClick={() => {
+                if (assignMode) {
+                  setAssignMode(null);
+                } else {
+                  clearAllAnalysis();
+                }
+              }}
               className="ml-auto text-slate-400 hover:text-slate-600 text-[11px] underline"
             >
               Cancel
@@ -908,6 +1094,41 @@ export default function DAGPlayground() {
       </div>
 
       {/* Chat Panel */}
+      <CausalAnalysisPanel
+        isOpen={causalPanelOpen}
+        onClose={() => setCausalPanelOpen(false)}
+        nodes={nodes.map((n) => ({
+          id: n.id,
+          label: (n.data.label as string) || n.id,
+          isLatent: !!n.data.isLatent,
+        }))}
+        treatmentId={treatmentId}
+        outcomeId={outcomeId}
+        confounderIds={confounderIds}
+        onSetTreatment={(id) => {
+          if (id && id === outcomeId) setOutcomeId(null);
+          if (id && confounderIds.includes(id)) setConfounderIds((cs) => cs.filter((c) => c !== id));
+          setTreatmentId(id);
+          setCausalResult(null);
+        }}
+        onSetOutcome={(id) => {
+          if (id && id === treatmentId) setTreatmentId(null);
+          if (id && confounderIds.includes(id)) setConfounderIds((cs) => cs.filter((c) => c !== id));
+          setOutcomeId(id);
+          setCausalResult(null);
+        }}
+        onSetConfounders={(ids) => {
+          setConfounderIds(ids);
+          setCausalResult(null);
+        }}
+        assignMode={assignMode}
+        onSetAssignMode={setAssignMode}
+        result={causalResult}
+        loading={causalLoading}
+        onRun={runCausalAnalysis}
+        onClearResult={clearCausalResult}
+      />
+
       <DAGChatPanel
         nodes={toGraphPayload(nodes, edges).nodes}
         edges={toGraphPayload(nodes, edges).edges}

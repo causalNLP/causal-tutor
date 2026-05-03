@@ -15,8 +15,9 @@ from .dag_models import (
     PathsRequest, PathsResponse,
     DAGAnalyzeRequest, DAGAnalyzeResponse,
     DAGChatRequest,
+    CausalAnalysisRequest, CausalAnalysisResponse,
 )
-from .dag_services import validate_dag, check_d_separation, find_all_paths, analyze_dag_with_gpt, chat_about_dag
+from .dag_services import validate_dag, check_d_separation, find_all_paths, analyze_dag_with_gpt, chat_about_dag, causal_analysis
 
 load_dotenv()
 
@@ -182,6 +183,24 @@ async def dag_d_separation(request: DSeparationRequest):
 async def dag_paths(request: PathsRequest):
     try:
         return find_all_paths(request.graph, request.source, request.target)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/dag/causal-analysis", response_model=CausalAnalysisResponse)
+async def dag_causal_analysis(request: CausalAnalysisRequest):
+    try:
+        return causal_analysis(
+            request.graph,
+            request.treatment,
+            request.outcome,
+            request.conditioning_set,
+            request.latent_nodes,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         import traceback
         traceback.print_exc()

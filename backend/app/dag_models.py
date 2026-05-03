@@ -81,6 +81,34 @@ class DAGAnalyzeResponse(BaseModel):
     faithfulness_notes: str = Field(description="Notes on faithfulness assumption and potential violations")
 
 
+# --- Causal Analysis (Roles + Backdoor Criterion) ---
+
+class CausalAnalysisRequest(BaseModel):
+    graph: DAGGraph
+    treatment: str
+    outcome: str
+    conditioning_set: List[str] = []
+    latent_nodes: List[str] = Field(default_factory=list, description="Nodes that are unobserved/latent and cannot be conditioned on")
+
+
+class AnalysisPathInfo(BaseModel):
+    path: List[str]
+    path_type: str = Field(description="directed, backdoor, or other")
+    is_blocked: bool
+    block_reason: Optional[str] = None
+    collider_nodes: List[str] = Field(default_factory=list)
+
+
+class CausalAnalysisResponse(BaseModel):
+    paths: List[AnalysisPathInfo]
+    d_separated: bool = Field(description="Are T and Y d-separated given Z?")
+    active_paths: List[List[str]] = Field(default_factory=list)
+    backdoor_satisfied: bool
+    backdoor_issues: List[str] = Field(default_factory=list)
+    minimal_adjustment_set: Optional[List[str]] = None
+    explanation: str
+
+
 # --- Chat ---
 
 class DAGChatRequest(BaseModel):

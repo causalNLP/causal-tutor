@@ -13,6 +13,7 @@ from .dag_models import (
     DSeparationResponse,
     PathInfo, PathsResponse,
     DAGAnalyzeResponse,
+    AnalysisPathInfo, CausalAnalysisResponse,
 )
 
 load_dotenv()
@@ -234,7 +235,201 @@ def find_all_paths(graph: DAGGraph, source: str, target: str) -> PathsResponse:
 
 
 # ---------------------------------------------------------------------------
-# 4. GPT Analysis
+# 4. Causal Analysis (roles + backdoor criterion)
+# ---------------------------------------------------------------------------
+
+def _block_reason(G: nx.DiGraph, path: List[str], conditioning_set: set, labels: dict) -> Optional[str]:
+    """Walk the path and produce a human-readable reason it's blocked, or None if open."""
+    for i in range(1, len(path) - 1):
+        prev_node, node, next_node = path[i - 1], path[i], path[i + 1]
+        node_label = labels.get(node, node)
+
+        if _is_collider(G, prev_node, node, next_node):
+            desc = _descendants(G, node) | {node}
+            if not desc.intersection(conditioning_set):
+                return f"blocked at collider '{node_label}' (not in conditioning set)"
+        else:
+            if node in conditioning_set:
+                kind = "fork" if (G.has_edge(node, prev_node) and G.has_edge(node, next_node)) else "chain"
+                return f"blocked by conditioning on '{node_label}' ({kind})"
+    return None
+
+
+def _open_reason(G: nx.DiGraph, path: List[str], conditioning_set: set, labels: dict) -> Optional[str]:
+    """If a path is open *because* a collider was opened by conditioning, surface that."""
+    for i in range(1, len(path) - 1):
+        prev_node, node, next_node = path[i - 1], path[i], path[i + 1]
+        node_label = labels.get(node, node)
+        if _is_collider(G, prev_node, node, next_node):
+            desc = _descendants(G, node) | {node}
+            if desc.intersection(conditioning_set):
+                cond_label = labels.get(node, node) if node in conditioning_set else None
+                if cond_label:
+                    return f"collider '{node_label}' opened by conditioning"
+                else:
+                    # descendant of collider conditioned
+                    return f"collider '{node_label}' opened (descendant in conditioning set)"
+    return None
+
+
+def _find_minimal_adjustment_set(
+    G: nx.DiGraph, treatment: str, outcome: str, latent: set
+) -> Optional[List[str]]:
+    """Greedy search for a minimal adjustment set satisfying the backdoor criterion.
+
+    Returns None if the graph is too large (>12 observable candidates) or if no
+    valid set exists among observable nodes.
+    """
+    desc_T = _descendants(G, treatment) | {treatment}
+    # Candidates: non-T, non-Y, non-latent, not descendants of T
+    candidates = [
+        n for n in G.nodes()
+        if n != treatment and n != outcome and n not in desc_T and n not in latent
+    ]
+    if len(candidates) > 12:
+        return None
+
+    # Get all backdoor paths
+    all_undirected = _find_all_undirected_paths(G, treatment, outcome)
+    backdoor_paths = [p for p in all_undirected if _classify_path(G, p) == "backdoor"]
+
+    def blocks_all_backdoors(z_set: set) -> bool:
+        for p in backdoor_paths:
+            if _is_path_active(G, p, z_set):
+                return False
+        return True
+
+    # Try sets of increasing size
+    from itertools import combinations as _combo
+    for size in range(0, len(candidates) + 1):
+        for combo in _combo(candidates, size):
+            z = set(combo)
+            if blocks_all_backdoors(z):
+                return list(combo)
+    return None
+
+
+def causal_analysis(
+    graph: DAGGraph,
+    treatment: str,
+    outcome: str,
+    conditioning_set: List[str],
+    latent_nodes: List[str],
+) -> CausalAnalysisResponse:
+    G = build_networkx_graph(graph)
+    labels = _node_label_map(graph)
+    cond_set = set(conditioning_set)
+    latent = set(latent_nodes)
+
+    if treatment not in G.nodes() or outcome not in G.nodes():
+        raise ValueError("Treatment or outcome node not in graph")
+
+    # 1. Enumerate all undirected paths
+    all_undirected = _find_all_undirected_paths(G, treatment, outcome)
+
+    # 2. Classify and check blocking
+    paths_info: List[AnalysisPathInfo] = []
+    active_paths: List[List[str]] = []
+    for path in all_undirected:
+        ptype = _classify_path(G, path)
+        colliders = _find_colliders_on_path(G, path)
+        is_blocked = not _is_path_active(G, path, cond_set)
+        reason: Optional[str] = None
+        if is_blocked:
+            reason = _block_reason(G, path, cond_set, labels)
+        else:
+            reason = _open_reason(G, path, cond_set, labels)
+        paths_info.append(AnalysisPathInfo(
+            path=path,
+            path_type=ptype,
+            is_blocked=is_blocked,
+            block_reason=reason,
+            collider_nodes=colliders,
+        ))
+        if not is_blocked:
+            active_paths.append(path)
+
+    # 3. d-separation verdict (use networkx if possible)
+    try:
+        d_sep = bool(nx.d_separated(G, {treatment}, {outcome}, cond_set))
+    except Exception:
+        d_sep = len(active_paths) == 0
+
+    # 4. Backdoor criterion
+    backdoor_issues: List[str] = []
+    desc_T = _descendants(G, treatment)
+    descendant_violations = cond_set.intersection(desc_T)
+    for n in descendant_violations:
+        backdoor_issues.append(
+            f"Z contains '{labels.get(n, n)}', a descendant of treatment — conditioning on it can introduce post-treatment bias."
+        )
+    # Latent in conditioning set
+    latent_violations = cond_set.intersection(latent)
+    for n in latent_violations:
+        backdoor_issues.append(
+            f"Z contains '{labels.get(n, n)}', which is unobservable (latent) — it can't be used in practice."
+        )
+    # Unblocked backdoor paths
+    for info in paths_info:
+        if info.path_type == "backdoor" and not info.is_blocked:
+            path_str = " — ".join(labels.get(n, n) for n in info.path)
+            backdoor_issues.append(
+                f"Backdoor path ({path_str}) is not blocked by Z."
+            )
+
+    backdoor_satisfied = len(backdoor_issues) == 0
+
+    # 5. Minimal adjustment set suggestion (only if not satisfied)
+    minimal_set: Optional[List[str]] = None
+    if not backdoor_satisfied:
+        minimal_set = _find_minimal_adjustment_set(G, treatment, outcome, latent)
+
+    # 6. Explanation
+    label_T = labels.get(treatment, treatment)
+    label_Y = labels.get(outcome, outcome)
+    cond_str = "{" + ", ".join(labels.get(c, c) for c in conditioning_set) + "}" if conditioning_set else "{} (empty)"
+
+    if backdoor_satisfied:
+        if d_sep:
+            explanation = (
+                f"**Causal effect identifiable.** With conditioning set Z = {cond_str}, "
+                f"{label_T} and {label_Y} are d-separated, meaning all backdoor paths are blocked "
+                f"and there is no remaining causal pathway. (This is unusual — typically directed "
+                f"paths from T to Y remain open, which is what we want for estimation.)"
+            )
+        else:
+            explanation = (
+                f"**Backdoor criterion satisfied.** With Z = {cond_str}, all backdoor paths from "
+                f"{label_T} to {label_Y} are blocked, so the causal effect is identifiable via the "
+                f"adjustment formula: $E[Y | do(T)] = \\sum_z E[Y | T, Z=z] P(Z=z)$. "
+                f"Directed paths remain open (this is expected — they carry the causal effect)."
+            )
+    else:
+        suggestion = ""
+        if minimal_set is not None:
+            if len(minimal_set) == 0:
+                suggestion = " A minimal adjustment set is the empty set — no adjustment is needed once issues above are resolved."
+            else:
+                names = ", ".join(labels.get(n, n) for n in minimal_set)
+                suggestion = f" A minimal sufficient adjustment set is **{{{names}}}**."
+        explanation = (
+            f"**Backdoor criterion not satisfied** for {label_T} → {label_Y} given Z = {cond_str}. "
+            f"See issues below.{suggestion}"
+        )
+
+    return CausalAnalysisResponse(
+        paths=paths_info,
+        d_separated=d_sep,
+        active_paths=active_paths,
+        backdoor_satisfied=backdoor_satisfied,
+        backdoor_issues=backdoor_issues,
+        minimal_adjustment_set=minimal_set,
+        explanation=explanation,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 5. GPT Analysis
 # ---------------------------------------------------------------------------
 
 DAG_ANALYSIS_SYSTEM_PROMPT = """You are an expert in causal inference and graphical causal models (Pearl's framework). A student has drawn a Directed Acyclic Graph (DAG). Analyze it thoroughly.
