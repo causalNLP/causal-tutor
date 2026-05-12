@@ -875,17 +875,15 @@ export default function DAGPlayground() {
             <RotateCcw size={16} />
           </button>
 
-          {/* Chat toggle */}
-          <button
-            onClick={() => setChatOpen(!chatOpen)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm border ${
-              chatOpen
-                ? "bg-indigo-50 text-indigo-700 border-indigo-200"
-                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-            }`}
-          >
-            <MessageSquare size={14} /> Chat
-          </button>
+          {/* Chat toggle — hidden while the chat panel is already open */}
+          {!chatOpen && (
+            <button
+              onClick={() => setChatOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shadow-sm border bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+            >
+              <MessageSquare size={14} /> Chat
+            </button>
+          )}
         </header>
 
         {/* Status bar */}
