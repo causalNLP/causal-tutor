@@ -9,10 +9,10 @@ import { apiUrl } from "@/lib/api";
 import {
   Loader2, Paperclip, Bot, User,
   Plus, PanelRightClose, PanelRightOpen,
-  LayoutDashboard, X, FileText, ArrowUp,
-  BrainCircuit, BookOpen, GraduationCap, Share2, Database,
+  LayoutDashboard, X, ArrowUp,
+  BrainCircuit,
   MessageSquare, Trash2, Maximize2, AlertTriangle, GitBranch,
-  CheckCircle2, HelpCircle, ChevronDown, ChevronUp
+  CheckCircle2, ChevronDown, ChevronUp
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
@@ -47,13 +47,9 @@ interface ChatSession {
     analysis: APIAnalysisResponse | null;
 }
 
-export default function CausalTutor({
-  onOpenPlayground,
-  onOpenSandbox,
+export default function ResearchLab({
   skipInitialResume = false,
 }: {
-  onOpenPlayground?: () => void;
-  onOpenSandbox?: () => void;
   /** When true, populate sidebar history but do NOT auto-restore the most
    *  recent active session. Set by page.tsx on the very first mount of the SPA
    *  (i.e. fresh page load / hard refresh) so Lab opens with an empty state. */
@@ -90,7 +86,7 @@ export default function CausalTutor({
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Load sessions + restore the previously-active session on mount.
-  // Runs every time CausalTutor mounts — including after tab-switches and reloads —
+  // Runs every time ResearchLab mounts — including after tab-switches and reloads —
   // so the conversation the user was in is preserved across navigation.
   useEffect(() => {
     try {
@@ -459,36 +455,9 @@ export default function CausalTutor({
                         <h2 className="text-3xl font-bold text-slate-900 mb-3 text-center tracking-tight">
                             Start Causal Analysis
                         </h2>
-                        <p className="text-slate-500 mb-10 text-center max-w-md text-base leading-relaxed">
+                        <p className="text-slate-500 text-center max-w-md text-base leading-relaxed">
                             Upload a research paper or describe a study design. I'll critique the methodology, check assumptions, and suggest alternatives.
                         </p>
-                        
-                        <div className="flex flex-wrap justify-center gap-4 w-full max-w-3xl">
-                            <SuggestionCard 
-                                icon={<GraduationCap size={20} className="text-indigo-500" />}
-                                title="Analyze a Paper"
-                                subtitle="Upload PDF for critique"
-                                onClick={() => fileInputRef.current?.click()}
-                            />
-                             <SuggestionCard 
-                                icon={<BookOpen size={20} className="text-emerald-500" />}
-                                title="Design a Study"
-                                subtitle="Get help choosing a method"
-                                onClick={() => setInput("I want to estimate the causal effect of...")}
-                            />
-                            <SuggestionCard
-                                icon={<Share2 size={20} className="text-amber-500" />}
-                                title="DAG Playground"
-                                subtitle="Build and analyze causal graphs"
-                                onClick={() => onOpenPlayground?.()}
-                            />
-                            <SuggestionCard
-                                icon={<Database size={20} className="text-cyan-500" />}
-                                title="Dataset Sandbox"
-                                subtitle="Run causal methods on real data"
-                                onClick={() => onOpenSandbox?.()}
-                            />
-                        </div>
                     </div>
                 ) : (
                     // CHAT MESSAGES
@@ -818,36 +787,3 @@ function AnalysisReportBlock({ data }: { data: APIAnalysisResponse }) {
     );
 }
 
-function SuggestionCard({ icon, title, subtitle, onClick }: { icon: React.ReactNode, title: string, subtitle: string, onClick: () => void }) {
-    return (
-        <button 
-            onClick={onClick}
-            className="flex flex-col items-start p-5 bg-white border border-slate-200 rounded-2xl hover:bg-slate-50 hover:border-slate-300 hover:shadow-md transition-all text-left shadow-sm group w-full sm:w-[calc(50%-0.5rem)] md:w-[220px] relative overflow-hidden"
-        >
-            <div className="mb-3 p-2 bg-slate-50 rounded-xl group-hover:bg-white group-hover:scale-110 transition-all duration-300 border border-slate-100 shadow-sm">{icon}</div>
-            <div className="font-bold text-sm text-slate-800 mb-1 group-hover:text-indigo-600 transition-colors">{title}</div>
-            <div className="text-xs text-slate-500 font-medium">{subtitle}</div>
-            <div className="absolute right-4 top-4 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-2 group-hover:translate-x-0">
-                <ChevronRight size={16} className="text-slate-300" />
-            </div>
-        </button>
-    );
-}
-
-function ChevronRight({ size, className }: { size: number, className?: string }) {
-    return (
-        <svg 
-            width={size} 
-            height={size} 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-            className={className}
-        >
-            <path d="m9 18 6-6-6-6" />
-        </svg>
-    );
-}

@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
-import CausalTutor from "@/components/CausalTutor";
+import ResearchLab from "@/components/ResearchLab";
 import CurriculumDashboard from "@/components/CurriculumDashboard";
 import ApiKeySettings from "@/components/ApiKeySettings";
 import TutorChatPanel, { type TutorFeature } from "@/components/TutorChatPanel";
+import WelcomeHome from "@/components/WelcomeHome";
 import {
-  BookOpen, FlaskConical, Share2, Database, KeyRound, MessageSquare,
+  Home as HomeIcon, BookOpen, FlaskConical, Share2, Database, KeyRound, MessageSquare,
   BrainCircuit, PanelLeftClose, PanelLeftOpen,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -60,7 +61,7 @@ const DAGPlayground = dynamic(() => import("@/components/DAGPlayground"), { ssr:
 const DatasetSandbox = dynamic(() => import("@/components/DatasetSandbox"), { ssr: false });
 
 export default function Home() {
-  const [activeMode, setActiveMode] = useState<"lab" | "curriculum" | "playground" | "sandbox">("lab");
+  const [activeMode, setActiveMode] = useState<"home" | "lab" | "curriculum" | "playground" | "sandbox">("home");
   const [apiKeyOpen, setApiKeyOpen] = useState(false);
   const storedKey = useStoredKey();
 
@@ -91,9 +92,9 @@ export default function Home() {
   // True while the user is mid-exam in Curriculum — hides FAB and force-closes the panel.
   const [chatLocked, setChatLocked] = useState(false);
 
-  // Reset context to "general" when switching to Lab or Sandbox (which don't publish)
+  // Reset context to "general" when switching to Home, Lab, or Sandbox (which don't publish)
   useEffect(() => {
-    if (activeMode === "lab" || activeMode === "sandbox") {
+    if (activeMode === "home" || activeMode === "lab" || activeMode === "sandbox") {
       setFeatureContext({ feature: "general", payload: undefined });
     }
     // For curriculum/playground, the child component publishes via onContextChange.
@@ -164,10 +165,11 @@ export default function Home() {
 
         {/* Nav buttons */}
         <div className={`flex flex-col flex-1 gap-1.5 ${sidebarExpanded ? 'px-2' : ''}`}>
-          <SidebarNavButton icon={FlaskConical} label="Research Lab" active={activeMode === 'lab'} onClick={() => setActiveMode('lab')} accent="text-indigo-400" expanded={sidebarExpanded} />
+          <SidebarNavButton icon={HomeIcon} label="Home" active={activeMode === 'home'} onClick={() => setActiveMode('home')} accent="text-white" expanded={sidebarExpanded} />
           <SidebarNavButton icon={BookOpen} label="Curriculum" active={activeMode === 'curriculum'} onClick={() => setActiveMode('curriculum')} accent="text-emerald-400" expanded={sidebarExpanded} />
           <SidebarNavButton icon={Share2} label="DAG Playground" active={activeMode === 'playground'} onClick={() => setActiveMode('playground')} accent="text-amber-400" expanded={sidebarExpanded} />
           <SidebarNavButton icon={Database} label="Dataset Sandbox" active={activeMode === 'sandbox'} onClick={() => setActiveMode('sandbox')} accent="text-cyan-400" expanded={sidebarExpanded} />
+          <SidebarNavButton icon={FlaskConical} label="Research Lab" active={activeMode === 'lab'} onClick={() => setActiveMode('lab')} accent="text-indigo-400" expanded={sidebarExpanded} />
         </div>
 
         {/* Bottom: API key settings */}
@@ -189,12 +191,10 @@ export default function Home() {
       {/* Main Content Area + Tutor Chat panel as flex siblings */}
       <div className="flex-1 h-full overflow-hidden relative flex">
         <div className="flex-1 h-full overflow-hidden relative">
-          {activeMode === "lab" ? (
-              <CausalTutor
-                onOpenPlayground={() => setActiveMode("playground")}
-                onOpenSandbox={() => setActiveMode("sandbox")}
-                skipInitialResume={isFirstPageMount.current}
-              />
+          {activeMode === "home" ? (
+              <WelcomeHome onNavigate={setActiveMode} />
+          ) : activeMode === "lab" ? (
+              <ResearchLab skipInitialResume={isFirstPageMount.current} />
           ) : activeMode === "curriculum" ? (
               <CurriculumDashboard
                 onContextChange={handleContextChange}
