@@ -16,7 +16,7 @@ import { API_KEY_MODAL_EVENT } from "@/lib/apiErrors";
 
 // ── Sidebar nav button (handles both expanded and collapsed states) ──────
 function SidebarNavButton({
-  icon: Icon, label, active, onClick, accent, expanded, dot,
+  icon: Icon, label, active, onClick, accent, expanded, dot, disabled = false,
 }: {
   icon: LucideIcon;
   label: string;
@@ -25,13 +25,17 @@ function SidebarNavButton({
   accent: string; // tailwind text-color classes for active state, e.g. "text-indigo-400"
   expanded: boolean;
   dot?: string | null; // optional indicator dot color
+  disabled?: boolean; // when true (e.g., during an active exam), the button is non-interactive
 }) {
   if (expanded) {
     return (
       <button
         onClick={onClick}
+        disabled={disabled}
         className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
-          active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
+          disabled
+            ? "text-slate-600 cursor-not-allowed opacity-50"
+            : active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
         }`}
       >
         <Icon size={20} className="flex-shrink-0" />
@@ -43,16 +47,21 @@ function SidebarNavButton({
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       title={label}
       className={`relative p-3 mx-auto rounded-xl transition-all group ${
-        active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
+        disabled
+          ? "text-slate-600 cursor-not-allowed opacity-50"
+          : active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
       }`}
     >
       <Icon size={24} />
       {dot && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full ${dot}`} />}
-      <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-        {label}
-      </div>
+      {!disabled && (
+        <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+          {label}
+        </div>
+      )}
     </button>
   );
 }
@@ -126,13 +135,19 @@ export default function Home() {
     isFirstPageMount.current = false;
   }, []);
 
+  // While an exam is active, force-collapse the sidebar and disable every
+  // nav button. The user's expand preference is preserved in state and
+  // pops back automatically when the exam ends.
+  const navLocked = chatLocked;
+  const effectivelyExpanded = sidebarExpanded && !navLocked;
+
   return (
     <main className="h-screen w-screen overflow-hidden bg-white flex">
       {/* Platform Navigation Sidebar */}
-      <div className={`relative ${sidebarExpanded ? 'w-[220px]' : 'w-[60px]'} bg-slate-900 flex flex-col py-4 flex-shrink-0 z-50 transition-all duration-300 ease-in-out`}>
+      <div className={`relative ${effectivelyExpanded ? 'w-[220px]' : 'w-[60px]'} bg-slate-900 flex flex-col py-4 flex-shrink-0 z-50 transition-all duration-300 ease-in-out`}>
 
         {/* Header — brand + collapse toggle */}
-        {sidebarExpanded ? (
+        {effectivelyExpanded ? (
           <div className="px-3 mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
@@ -142,7 +157,8 @@ export default function Home() {
             </div>
             <button
               onClick={() => setSidebarExpanded(false)}
-              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors flex-shrink-0"
+              disabled={navLocked}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
               title="Collapse sidebar"
               aria-label="Collapse sidebar"
             >
@@ -152,35 +168,39 @@ export default function Home() {
         ) : (
           <div className="flex justify-center mb-4">
             <button
-              onClick={() => setSidebarExpanded(true)}
-              className="group w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg hover:bg-indigo-700 transition-colors"
-              title="Expand sidebar"
-              aria-label="Expand sidebar"
+              onClick={() => !navLocked && setSidebarExpanded(true)}
+              disabled={navLocked}
+              className={`group w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+                navLocked ? "opacity-60 cursor-not-allowed" : "hover:bg-indigo-700"
+              }`}
+              title={navLocked ? "Locked during exam" : "Expand sidebar"}
+              aria-label={navLocked ? "Sidebar locked during exam" : "Expand sidebar"}
             >
-              <BrainCircuit className="text-white block group-hover:hidden" size={22} />
-              <PanelLeftOpen className="text-white hidden group-hover:block" size={20} />
+              <BrainCircuit className={`text-white ${navLocked ? "" : "block group-hover:hidden"}`} size={22} />
+              {!navLocked && <PanelLeftOpen className="text-white hidden group-hover:block" size={20} />}
             </button>
           </div>
         )}
 
         {/* Nav buttons */}
-        <div className={`flex flex-col flex-1 gap-1.5 ${sidebarExpanded ? 'px-2' : ''}`}>
-          <SidebarNavButton icon={HomeIcon} label="Home" active={activeMode === 'home'} onClick={() => setActiveMode('home')} accent="text-white" expanded={sidebarExpanded} />
-          <SidebarNavButton icon={BookOpen} label="Curriculum" active={activeMode === 'curriculum'} onClick={() => setActiveMode('curriculum')} accent="text-emerald-400" expanded={sidebarExpanded} />
-          <SidebarNavButton icon={Share2} label="DAG Playground" active={activeMode === 'playground'} onClick={() => setActiveMode('playground')} accent="text-amber-400" expanded={sidebarExpanded} />
-          <SidebarNavButton icon={Database} label="Dataset Sandbox" active={activeMode === 'sandbox'} onClick={() => setActiveMode('sandbox')} accent="text-cyan-400" expanded={sidebarExpanded} />
-          <SidebarNavButton icon={FlaskConical} label="Research Lab" active={activeMode === 'lab'} onClick={() => setActiveMode('lab')} accent="text-indigo-400" expanded={sidebarExpanded} />
+        <div className={`flex flex-col flex-1 gap-1.5 ${effectivelyExpanded ? 'px-2' : ''}`}>
+          <SidebarNavButton icon={HomeIcon} label="Home" active={activeMode === 'home'} onClick={() => setActiveMode('home')} accent="text-white" expanded={effectivelyExpanded} disabled={navLocked} />
+          <SidebarNavButton icon={BookOpen} label="Curriculum" active={activeMode === 'curriculum'} onClick={() => setActiveMode('curriculum')} accent="text-emerald-400" expanded={effectivelyExpanded} disabled={navLocked} />
+          <SidebarNavButton icon={Share2} label="DAG Playground" active={activeMode === 'playground'} onClick={() => setActiveMode('playground')} accent="text-amber-400" expanded={effectivelyExpanded} disabled={navLocked} />
+          <SidebarNavButton icon={Database} label="Dataset Sandbox" active={activeMode === 'sandbox'} onClick={() => setActiveMode('sandbox')} accent="text-cyan-400" expanded={effectivelyExpanded} disabled={navLocked} />
+          <SidebarNavButton icon={FlaskConical} label="Research Lab" active={activeMode === 'lab'} onClick={() => setActiveMode('lab')} accent="text-indigo-400" expanded={effectivelyExpanded} disabled={navLocked} />
         </div>
 
         {/* Bottom: API key settings */}
-        <div className={`${sidebarExpanded ? 'px-2' : ''}`}>
+        <div className={`${effectivelyExpanded ? 'px-2' : ''}`}>
           <SidebarNavButton
             icon={KeyRound}
             label="OpenAI API Key"
             active={apiKeyOpen}
             onClick={() => setApiKeyOpen((v) => !v)}
             accent="text-indigo-400"
-            expanded={sidebarExpanded}
+            expanded={effectivelyExpanded}
+            disabled={navLocked}
             dot={storedKey ? 'bg-emerald-400' : 'bg-slate-500'}
           />
         </div>
@@ -199,7 +219,7 @@ export default function Home() {
               <CurriculumDashboard
                 onContextChange={handleContextChange}
                 onChatLockedChange={handleChatLockedChange}
-                compactCards={tutorChatOpen && sidebarExpanded}
+                compactCards={tutorChatOpen && effectivelyExpanded}
               />
           ) : activeMode === "playground" ? (
               <DAGPlayground onContextChange={handleContextChange} />

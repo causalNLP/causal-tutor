@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { BookOpen, GraduationCap, PlayCircle, Loader2, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, XCircle, Check, RotateCcw } from "lucide-react";
+import { BookOpen, GraduationCap, PlayCircle, Loader2, ArrowLeft, CheckCircle2, ChevronRight, ChevronLeft, XCircle, Check, RotateCcw, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { getApiHeaders } from "@/lib/apiKey";
 import { checkAuthResponse } from "@/lib/apiErrors";
@@ -83,13 +83,15 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
         }
     }, [selectedMethod, viewMode, methods, onContextChange]);
 
-    // Lock the Tutor chat while the user is taking an exam.
+    // Lock the Tutor chat (and platform nav) only while the student is
+    // actively answering questions. The post-submit review screen unlocks
+    // again so they can ask the AI about their mistakes.
     useEffect(() => {
         if (!onChatLockedChange) return;
-        onChatLockedChange(viewMode === "exam");
+        onChatLockedChange(viewMode === "exam" && !showResult);
         // On unmount, ensure the lock is released so other modes aren't accidentally locked.
         return () => onChatLockedChange(false);
-    }, [viewMode, onChatLockedChange]);
+    }, [viewMode, showResult, onChatLockedChange]);
 
     const startTheory = (method: any) => {
         setSelectedMethod(method);
@@ -208,11 +210,30 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
         const isLast = currentQuestionIdx === examQuestions.length - 1;
         const allAnswered = userAnswers.every(a => a !== null);
 
+        const quitExam = () => {
+            if (window.confirm("Quit the exam? Your progress will be lost.")) {
+                setViewMode("grid");
+            }
+        };
         return (
             <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-                <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-                    <span className="font-bold text-slate-700">Exam Mode</span>
-                    <span className="text-sm bg-slate-100 px-3 py-1 rounded-full text-slate-600">Question {currentQuestionIdx + 1} / {examQuestions.length}</span>
+                <header className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                        <span className="font-bold text-slate-700">Exam Mode</span>
+                        {examMethodTitle && (
+                            <span className="text-sm text-slate-500 truncate hidden md:inline">· {examMethodTitle}</span>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-sm bg-slate-100 px-3 py-1 rounded-full text-slate-600">Question {currentQuestionIdx + 1} / {examQuestions.length}</span>
+                        <button
+                            onClick={quitExam}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-rose-50 hover:border-rose-200 hover:text-rose-700 transition-colors flex items-center gap-1.5"
+                            title="Quit exam and return to curriculum"
+                        >
+                            <X size={14} /> Quit exam
+                        </button>
+                    </div>
                 </header>
 
                 <div className="flex-1 flex items-center justify-center p-6">
