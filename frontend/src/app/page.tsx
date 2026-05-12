@@ -5,9 +5,56 @@ import CausalTutor from "@/components/CausalTutor";
 import CurriculumDashboard from "@/components/CurriculumDashboard";
 import ApiKeySettings from "@/components/ApiKeySettings";
 import TutorChatPanel, { type TutorFeature } from "@/components/TutorChatPanel";
-import { BookOpen, FlaskConical, Share2, Database, KeyRound, MessageSquare } from "lucide-react";
+import {
+  BookOpen, FlaskConical, Share2, Database, KeyRound, MessageSquare,
+  BrainCircuit, PanelLeftClose, PanelLeftOpen,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useStoredKey } from "@/lib/apiKey";
 import { API_KEY_MODAL_EVENT } from "@/lib/apiErrors";
+
+// ── Sidebar nav button (handles both expanded and collapsed states) ──────
+function SidebarNavButton({
+  icon: Icon, label, active, onClick, accent, expanded, dot,
+}: {
+  icon: LucideIcon;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  accent: string; // tailwind text-color classes for active state, e.g. "text-indigo-400"
+  expanded: boolean;
+  dot?: string | null; // optional indicator dot color
+}) {
+  if (expanded) {
+    return (
+      <button
+        onClick={onClick}
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all text-sm font-medium ${
+          active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
+        }`}
+      >
+        <Icon size={20} className="flex-shrink-0" />
+        <span className="flex-1 text-left truncate">{label}</span>
+        {dot && <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />}
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className={`relative p-3 mx-auto rounded-xl transition-all group ${
+        active ? `bg-slate-800 ${accent}` : "text-slate-400 hover:text-white hover:bg-slate-800"
+      }`}
+    >
+      <Icon size={24} />
+      {dot && <span className={`absolute top-2 right-2 w-2 h-2 rounded-full ${dot}`} />}
+      <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+        {label}
+      </div>
+    </button>
+  );
+}
 
 const DAGPlayground = dynamic(() => import("@/components/DAGPlayground"), { ssr: false });
 const DatasetSandbox = dynamic(() => import("@/components/DatasetSandbox"), { ssr: false });
@@ -16,6 +63,18 @@ export default function Home() {
   const [activeMode, setActiveMode] = useState<"lab" | "curriculum" | "playground" | "sandbox">("lab");
   const [apiKeyOpen, setApiKeyOpen] = useState(false);
   const storedKey = useStoredKey();
+
+  // Sidebar collapse/expand state — persists across reloads.
+  const [sidebarExpanded, setSidebarExpanded] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const saved = localStorage.getItem("causal_tutor_sidebar_expanded");
+    return saved === null ? true : saved === "1";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("causal_tutor_sidebar_expanded", sidebarExpanded ? "1" : "0");
+    }
+  }, [sidebarExpanded]);
 
   // ── Unified Tutor chat state (panel + current feature context) ──
   const [tutorChatOpen, setTutorChatOpen] = useState(false);
@@ -63,75 +122,60 @@ export default function Home() {
   return (
     <main className="h-screen w-screen overflow-hidden bg-white flex">
       {/* Platform Navigation Sidebar */}
-      <div className="relative w-[60px] bg-slate-900 flex flex-col items-center py-4 flex-shrink-0 z-50">
-        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center mb-4 shadow-lg flex-shrink-0">
-           <span className="text-white font-bold text-lg">CT</span>
-        </div>
+      <div className={`relative ${sidebarExpanded ? 'w-[220px]' : 'w-[60px]'} bg-slate-900 flex flex-col py-4 flex-shrink-0 z-50 transition-all duration-300 ease-in-out`}>
 
-        {/* Top nav buttons */}
-        <div className="flex flex-col items-center gap-4 flex-1">
-          <button
-              onClick={() => setActiveMode("lab")}
-              className={`p-3 rounded-xl transition-all duration-200 group relative ${activeMode === 'lab' ? 'bg-slate-800 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              title="Research Design Lab"
-          >
-              <FlaskConical size={24} />
-              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                  Research Lab
+        {/* Header — brand + collapse toggle */}
+        {sidebarExpanded ? (
+          <div className="px-3 mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0">
+                <BrainCircuit className="text-white" size={22} />
               </div>
-          </button>
+              <span className="text-white font-bold text-sm truncate">Causal Tutor</span>
+            </div>
+            <button
+              onClick={() => setSidebarExpanded(false)}
+              className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors flex-shrink-0"
+              title="Collapse sidebar"
+              aria-label="Collapse sidebar"
+            >
+              <PanelLeftClose size={20} />
+            </button>
+          </div>
+        ) : (
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={() => setSidebarExpanded(true)}
+              className="group w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg hover:bg-indigo-700 transition-colors"
+              title="Expand sidebar"
+              aria-label="Expand sidebar"
+            >
+              <BrainCircuit className="text-white block group-hover:hidden" size={22} />
+              <PanelLeftOpen className="text-white hidden group-hover:block" size={20} />
+            </button>
+          </div>
+        )}
 
-          <button
-              onClick={() => setActiveMode("curriculum")}
-              className={`p-3 rounded-xl transition-all duration-200 group relative ${activeMode === 'curriculum' ? 'bg-slate-800 text-emerald-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              title="Causality Curriculum"
-          >
-              <BookOpen size={24} />
-              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                  Curriculum
-              </div>
-          </button>
-
-          <button
-              onClick={() => setActiveMode("playground")}
-              className={`p-3 rounded-xl transition-all duration-200 group relative ${activeMode === 'playground' ? 'bg-slate-800 text-amber-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              title="DAG Playground"
-          >
-              <Share2 size={24} />
-              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                  DAG Playground
-              </div>
-          </button>
-
-          <button
-              onClick={() => setActiveMode("sandbox")}
-              className={`p-3 rounded-xl transition-all duration-200 group relative ${activeMode === 'sandbox' ? 'bg-slate-800 text-cyan-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-              title="Dataset Sandbox"
-          >
-              <Database size={24} />
-              <div className="absolute left-14 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                  Dataset Sandbox
-              </div>
-          </button>
+        {/* Nav buttons */}
+        <div className={`flex flex-col flex-1 gap-1.5 ${sidebarExpanded ? 'px-2' : ''}`}>
+          <SidebarNavButton icon={FlaskConical} label="Research Lab" active={activeMode === 'lab'} onClick={() => setActiveMode('lab')} accent="text-indigo-400" expanded={sidebarExpanded} />
+          <SidebarNavButton icon={BookOpen} label="Curriculum" active={activeMode === 'curriculum'} onClick={() => setActiveMode('curriculum')} accent="text-emerald-400" expanded={sidebarExpanded} />
+          <SidebarNavButton icon={Share2} label="DAG Playground" active={activeMode === 'playground'} onClick={() => setActiveMode('playground')} accent="text-amber-400" expanded={sidebarExpanded} />
+          <SidebarNavButton icon={Database} label="Dataset Sandbox" active={activeMode === 'sandbox'} onClick={() => setActiveMode('sandbox')} accent="text-cyan-400" expanded={sidebarExpanded} />
         </div>
 
         {/* Bottom: API key settings */}
-        <button
+        <div className={`${sidebarExpanded ? 'px-2' : ''}`}>
+          <SidebarNavButton
+            icon={KeyRound}
+            label="OpenAI API Key"
+            active={apiKeyOpen}
             onClick={() => setApiKeyOpen((v) => !v)}
-            className={`p-3 rounded-xl transition-all duration-200 group relative ${apiKeyOpen ? 'bg-slate-800 text-indigo-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-            title="OpenAI API Key"
-        >
-            <KeyRound size={22} />
-            {/* Dot indicator: emerald if user-key set, slate if using env default */}
-            <span
-                className={`absolute top-2 right-2 w-2 h-2 rounded-full ${storedKey ? 'bg-emerald-400' : 'bg-slate-500'}`}
-            />
-            {!apiKeyOpen && (
-              <div className="absolute left-14 bottom-1/2 translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                  OpenAI API Key
-              </div>
-            )}
-        </button>
+            accent="text-indigo-400"
+            expanded={sidebarExpanded}
+            dot={storedKey ? 'bg-emerald-400' : 'bg-slate-500'}
+          />
+        </div>
 
         <ApiKeySettings isOpen={apiKeyOpen} onClose={() => setApiKeyOpen(false)} />
       </div>

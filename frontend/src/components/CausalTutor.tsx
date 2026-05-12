@@ -366,20 +366,14 @@ export default function CausalTutor({
       <div
         className={`${isSidebarOpen ? 'w-[260px] translate-x-0' : 'w-0 -translate-x-full'} bg-slate-50 border-r border-slate-200 flex-shrink-0 transition-all duration-300 ease-in-out flex flex-col overflow-hidden relative h-full z-30`}
       >
-        {/* Sidebar Header */}
-        <div className="p-4 flex items-center justify-between">
+        {/* Sidebar header — only houses the mobile close button */}
+        <div className="p-2 flex items-center justify-end">
             <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors md:hidden absolute right-2 top-2"
+                className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors md:hidden"
             >
                 <PanelRightClose size={18} />
             </button>
-            <div className="flex items-center gap-2 px-2 w-full">
-                <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center shadow-sm">
-                    <BrainCircuit className="text-white w-5 h-5" />
-                </div>
-                <span className="font-semibold text-sm text-slate-800 tracking-tight">Causal Tutor</span>
-            </div>
         </div>
 
         {/* New Analysis Button */}

@@ -100,7 +100,7 @@ export default function ApiKeySettings({ isOpen, onClose }: ApiKeySettingsProps)
   return (
     <div
       ref={popoverRef}
-      className="absolute left-[68px] bottom-4 w-[340px] bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4 animate-in fade-in slide-in-from-left-2 duration-200"
+      className="absolute left-full ml-2 bottom-4 w-[340px] bg-white border border-slate-200 rounded-2xl shadow-2xl z-[60] p-4 animate-in fade-in slide-in-from-left-2 duration-200"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
