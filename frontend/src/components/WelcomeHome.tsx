@@ -273,7 +273,7 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
                 Built for new learners
               </span>
               <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 tracking-tight leading-tight mb-2.5">
-                Learn to tell causation from coincidence.
+                Learn to tell causation from correlation.
               </h1>
               <p className="text-sm text-slate-500 leading-relaxed mb-4">
                 Causal Tutor walks you from the basics to real-world data analysis through theory,
