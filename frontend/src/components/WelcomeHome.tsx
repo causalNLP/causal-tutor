@@ -110,7 +110,7 @@ const START_PATHS: StartPath[] = [
     mode: "playground",
   },
   {
-    title: "Reviewing a research paper or study",
+    title: "Review a research paper or study",
     description: "Drop it into the Research Lab for a methodology critique.",
     icon: FileSearch,
     iconColor: "text-indigo-700",
@@ -204,6 +204,237 @@ function HeroDAG() {
   );
 }
 
+function SharkDAG() {
+  return (
+    <svg
+      viewBox="0 0 300 200"
+      className="w-full h-full"
+      role="img"
+      aria-label="A causal graph showing warm weather as a common cause of ice cream sales and shark attacks."
+    >
+      <defs>
+        <style>{`
+          .welcome-flow-edge {
+            stroke-dasharray: 0.01 1;
+            stroke-dashoffset: 0;
+            animation: welcomeFlowDraw 4.8s ease-in-out infinite;
+          }
+
+          .welcome-edge-delay {
+            animation-delay: 0.35s;
+          }
+
+          .welcome-warm-node {
+            transform-origin: 150px 50px;
+            animation: welcomeWarmPulse 4.8s ease-in-out infinite;
+          }
+
+          .welcome-cold-node {
+            animation: welcomeNodeLift 4.8s ease-in-out infinite;
+          }
+
+          .welcome-hot-node {
+            animation: welcomeNodeLift 4.8s ease-in-out infinite;
+            animation-delay: 0.35s;
+          }
+
+          .welcome-correlation {
+            animation: welcomeDash 3s linear infinite;
+          }
+
+          .welcome-heat-ring {
+            transform-origin: 150px 50px;
+            animation: welcomeHeat 4.8s ease-in-out infinite;
+          }
+
+          .welcome-moving-arrow {
+            filter: drop-shadow(0 2px 2px rgb(146 64 14 / 0.25));
+          }
+
+          @keyframes welcomeFlowDraw {
+            0%, 10% {
+              stroke-dasharray: 0.01 1;
+              opacity: 0.3;
+            }
+            36%, 58% {
+              stroke-dasharray: 1 0;
+              opacity: 1;
+            }
+            88%, 100% {
+              stroke-dasharray: 1 0;
+              opacity: 0.35;
+            }
+          }
+
+          @keyframes welcomeWarmPulse {
+            0%, 100% {
+              transform: scale(1);
+            }
+            18%, 42% {
+              transform: scale(1.025);
+            }
+          }
+
+          @keyframes welcomeHeat {
+            0%, 100% {
+              opacity: 0.12;
+              transform: scale(0.88);
+            }
+            18%, 42% {
+              opacity: 0.55;
+              transform: scale(1.08);
+            }
+          }
+
+          @keyframes welcomeNodeLift {
+            0%, 20%, 100% {
+              transform: translateY(0);
+            }
+            42%, 58% {
+              transform: translateY(-2px);
+            }
+          }
+
+          @keyframes welcomeDash {
+            to {
+              stroke-dashoffset: -18;
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .welcome-flow-edge,
+            .welcome-edge-delay,
+            .welcome-warm-node,
+            .welcome-cold-node,
+            .welcome-hot-node,
+            .welcome-correlation,
+            .welcome-heat-ring {
+              animation: none;
+            }
+
+            .welcome-flow-edge {
+              stroke-dasharray: 1 0;
+              opacity: 1;
+            }
+
+            .welcome-moving-arrow {
+              display: none;
+            }
+          }
+        `}</style>
+        <filter id="welcome-node-shadow" x="-20%" y="-20%" width="140%" height="150%">
+          <feDropShadow dx="0" dy="6" stdDeviation="5" floodColor="#0f172a" floodOpacity="0.12" />
+        </filter>
+        <linearGradient id="welcome-warm-fill" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#fff7ed" />
+          <stop offset="100%" stopColor="#fef3c7" />
+        </linearGradient>
+        <linearGradient id="welcome-ice-fill" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#ecfeff" />
+          <stop offset="100%" stopColor="#cffafe" />
+        </linearGradient>
+        <linearGradient id="welcome-shark-fill" x1="0" x2="1" y1="0" y2="1">
+          <stop offset="0%" stopColor="#fff1f2" />
+          <stop offset="100%" stopColor="#ffe4e6" />
+        </linearGradient>
+      </defs>
+
+      <circle className="welcome-heat-ring" cx="150" cy="50" r="42" fill="#fde68a" />
+      <circle cx="150" cy="50" r="30" fill="#fff7ed" opacity="0.9" />
+
+      <path d="M 130 74 C 102 96, 82 112, 67 136" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
+      <path
+        className="welcome-flow-edge"
+        d="M 130 74 C 102 96, 82 112, 67 136"
+        pathLength="1"
+        stroke="#f59e0b"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      <path d="M 170 74 C 198 96, 218 112, 233 136" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
+      <path
+        className="welcome-flow-edge welcome-edge-delay"
+        d="M 170 74 C 198 96, 218 112, 233 136"
+        pathLength="1"
+        stroke="#f59e0b"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      <g className="welcome-moving-arrow">
+        <path d="M -10 -6 L 9 0 L -10 6 L -5 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
+        <animateMotion
+          dur="4.8s"
+          repeatCount="indefinite"
+          rotate="auto"
+          path="M 130 74 C 102 96, 82 112, 67 136"
+        />
+      </g>
+      <g className="welcome-moving-arrow welcome-moving-arrow-delay">
+        <path d="M -10 -6 L 9 0 L -10 6 L -5 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
+        <animateMotion
+          begin="0.35s"
+          dur="4.8s"
+          repeatCount="indefinite"
+          rotate="auto"
+          path="M 170 74 C 198 96, 218 112, 233 136"
+        />
+      </g>
+
+      <path
+        className="welcome-correlation"
+        d="M 82 158 C 112 179, 188 179, 218 158"
+        stroke="#94a3b8"
+        strokeWidth="1.5"
+        strokeDasharray="5 6"
+        strokeLinecap="round"
+        fill="none"
+      />
+
+      <g className="welcome-warm-node" filter="url(#welcome-node-shadow)">
+        <rect x="90" y="20" width="120" height="60" rx="16" fill="url(#welcome-warm-fill)" stroke="#f59e0b" strokeWidth="1.2" />
+        <circle cx="118" cy="50" r="12" fill="#fbbf24" />
+        <path d="M 118 30 L 118 36 M 118 64 L 118 70 M 98 50 L 104 50 M 132 50 L 138 50 M 104 36 L 108 40 M 128 60 L 132 64 M 104 64 L 108 60 M 128 40 L 132 36" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+        <text x="166" y="46" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
+          Warm
+        </text>
+        <text x="166" y="61" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
+          weather
+        </text>
+      </g>
+
+      <g className="welcome-cold-node" filter="url(#welcome-node-shadow)">
+        <rect x="22" y="128" width="104" height="60" rx="16" fill="url(#welcome-ice-fill)" stroke="#06b6d4" strokeWidth="1.1" />
+        <path d="M 42 146 L 56 146 L 49 171 Z" fill="#f59e0b" />
+        <path d="M 41 143 C 41 133, 57 133, 57 143 Z" fill="#f9a8d4" />
+        <circle cx="49" cy="139" r="5" fill="#fef3c7" />
+        <text x="88" y="151" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
+          Ice cream
+        </text>
+        <text x="88" y="166" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
+          sales
+        </text>
+      </g>
+
+      <g className="welcome-hot-node" filter="url(#welcome-node-shadow)">
+        <rect x="174" y="128" width="104" height="60" rx="16" fill="url(#welcome-shark-fill)" stroke="#fb7185" strokeWidth="1.1" />
+        <path d="M 190 160 C 198 145, 210 143, 218 160 C 208 156, 200 156, 190 160 Z" fill="#64748b" />
+        <path d="M 184 166 C 196 161, 211 161, 224 166" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" />
+        <path d="M 186 172 C 200 168, 212 168, 226 172" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.65" />
+        <text x="250" y="151" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
+          Shark
+        </text>
+        <text x="250" y="166" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
+          attacks
+        </text>
+      </g>
+    </svg>
+  );
+}
+
 function JourneySVG() {
   const steps = [
     { n: 1, x: 70, label: "Learn", fill: "#d1fae5", text: "#047857" },
@@ -288,7 +519,7 @@ function StartPathTile({ path, onNavigate }: { path: StartPath; onNavigate: (m: 
     >
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={16} className={path.iconColor} />
-        <span className="text-xs font-medium text-slate-900">{path.title}</span>
+        <span className="text-s font-medium text-slate-900">{path.title}</span>
       </div>
       <p className="text-[11px] text-slate-500 leading-relaxed">{path.description}</p>
     </button>
@@ -332,7 +563,7 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-4 aspect-[1.2/1] flex items-center justify-center">
-              <HeroDAG />
+              <SharkDAG />
             </div>
           </section>
 
@@ -343,13 +574,36 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
                 <Lightbulb size={20} />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-slate-900 mb-1">Why this matters</p>
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  Ice cream sales and drowning deaths rise together every summer but ice cream
-                  doesn&apos;t cause drowning. Hot weather causes both. Spotting the hidden cause is
-                  what makes a good scientist, a careful data analyst, and a sharp critical thinker.
+                <p className="text-m font-large text-slate-900 mb-1">Why this matters</p>
+                <p className="mt-3 text-m font-semibold tracking-tight text-slate-900">
+                  Ice Cream Sales Rise. Shark Attacks Rise Too.
+                </p>
+                <p className="text-sm text-slate-500 leading-relaxed mt-1">
+                  A dataset revealed a surprising pattern: as ice cream sales increase,
+                  shark attacks also spike.
+                </p>
+                <p className="text-m font-semibold text-slate-800 mt-1">
+                  So… does eating ice cream make you taste better to sharks?
+                </p>
+                <p className="text-sm text-slate-500 leading-relaxed mt-2">
+                  Not quite. The real driver is warm weather! Hotter days boost ice cream
+                  sales and bring more people to the beach, increasing the likelihood of
+                  shark encounters.
+                </p>
+                <p className="text-m font-semibold text-slate-800 mt-2">
+                  Correlation can look convincing. Causation tells the real story.
                 </p>
               </div>
+            </div>
+          </section>
+
+          {/* Personalized start */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 mb-8">
+            <p className="text-lg md:text-xl font-semibold text-slate-900 mb-3">Not sure where to begin?</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+              {START_PATHS.map((path) => (
+                <StartPathTile key={path.title} path={path} onNavigate={onNavigate} />
+              ))}
             </div>
           </section>
 
@@ -366,16 +620,6 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
             {FEATURES.map((card) => (
               <FeatureTile key={card.mode} card={card} onNavigate={onNavigate} />
             ))}
-          </section>
-
-          {/* Personalized start */}
-          <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5">
-            <p className="text-sm font-medium text-slate-900 mb-3">Not sure where to begin?</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-              {START_PATHS.map((path) => (
-                <StartPathTile key={path.title} path={path} onNavigate={onNavigate} />
-              ))}
-            </div>
           </section>
 
         </div>
