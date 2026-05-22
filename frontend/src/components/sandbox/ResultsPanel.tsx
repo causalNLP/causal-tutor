@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type {
   EstimateResponse,
+  SandboxIssue,
   ForestPlotData,
   ParallelTrendsPlotData,
   FirstStagePlotData,
@@ -25,6 +26,7 @@ interface ResultsPanelProps {
   result: EstimateResponse | null;
   interpretation: string;
   running: boolean;
+  errorMessage?: string;
 }
 
 function fmt(v: number | null, digits = 3): string {
@@ -53,6 +55,57 @@ function StatCard({
   );
 }
 
+function issueRank(issue: SandboxIssue): number {
+  if (issue.severity === "blocking") return 0;
+  if (issue.severity === "warning") return 1;
+  return 2;
+}
+
+function fallbackIssues(warnings: string[]): SandboxIssue[] {
+  return warnings.map((warning) => ({
+    severity: "warning",
+    title: "Sandbox warning",
+    message: warning,
+    fix_steps: [],
+    field: null,
+  }));
+}
+
+function IssuesPanel({ issues }: { issues: SandboxIssue[] }) {
+  if (issues.length === 0) return null;
+
+  const ordered = [...issues].sort((a, b) => issueRank(a) - issueRank(b));
+  const hasBlocking = ordered.some((issue) => issue.severity === "blocking");
+  const tone = hasBlocking
+    ? "bg-rose-50 border-rose-100 text-rose-900"
+    : "bg-amber-50 border-amber-100 text-amber-900";
+  const iconClass = hasBlocking ? "text-rose-600" : "text-amber-600";
+  const label = hasBlocking ? "Needs attention" : "Warnings";
+
+  return (
+    <div className={`border rounded-xl p-4 ${tone}`}>
+      <div className="flex items-center gap-2 font-bold text-xs uppercase mb-3">
+        <AlertTriangle size={14} className={iconClass} /> {label}
+      </div>
+      <div className="space-y-3">
+        {ordered.map((issue, i) => (
+          <div key={`${issue.title}-${i}`} className="text-xs leading-relaxed">
+            <div className="font-semibold">{issue.title}</div>
+            <p className="mt-0.5">{issue.message}</p>
+            {issue.fix_steps.length > 0 && (
+              <ol className="list-decimal list-inside mt-1.5 space-y-0.5">
+                {issue.fix_steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function renderPlot(result: EstimateResponse) {
   switch (result.plot_type) {
     case "forest":
@@ -76,8 +129,24 @@ function renderPlot(result: EstimateResponse) {
   }
 }
 
-export default function ResultsPanel({ result, interpretation, running }: ResultsPanelProps) {
+export default function ResultsPanel({ result, interpretation, running, errorMessage }: ResultsPanelProps) {
   if (!result && !running) {
+    if (errorMessage) {
+      return (
+        <div className="bg-rose-50 border border-rose-100 rounded-xl shadow-sm p-5">
+          <div className="flex items-center gap-2 text-rose-700 font-bold text-xs uppercase mb-2">
+            <AlertTriangle size={14} /> Sandbox could not run
+          </div>
+          <p className="text-sm text-rose-900 leading-relaxed">{errorMessage}</p>
+          <ol className="list-decimal list-inside text-xs text-rose-900 mt-3 space-y-1">
+            <li>Click Reset to restore the curated variables.</li>
+            <li>Check that treatment and outcome are selected.</li>
+            <li>Run the estimate again after changing one selector at a time.</li>
+          </ol>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6 text-center">
         <Target size={32} className="mx-auto text-slate-300 mb-3" strokeWidth={1.5} />
@@ -121,6 +190,10 @@ export default function ResultsPanel({ result, interpretation, running }: Result
   }
 
   const hasEstimate = result.estimate !== null;
+  const issues =
+    result.issues && result.issues.length > 0
+      ? result.issues
+      : fallbackIssues(result.warnings);
 
   return (
     <div className="space-y-4">
@@ -168,21 +241,8 @@ export default function ResultsPanel({ result, interpretation, running }: Result
         </div>
       )}
 
-      {/* Warnings */}
-      {result.warnings.length > 0 && (
-        <div className="bg-amber-50 border border-amber-100 rounded-xl p-4">
-          <div className="flex items-center gap-2 text-amber-700 font-bold text-xs uppercase mb-2">
-            <AlertTriangle size={14} /> Warnings
-          </div>
-          <ul className="space-y-1">
-            {result.warnings.map((w, i) => (
-              <li key={i} className="text-xs text-amber-900 leading-relaxed flex items-start gap-2">
-                <span className="text-amber-500 mt-0.5">•</span> {w}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* Issues */}
+      {issues.length > 0 && <IssuesPanel issues={issues} />}
 
       {/* Assumptions */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">

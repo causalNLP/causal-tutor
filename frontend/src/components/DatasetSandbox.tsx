@@ -27,6 +27,7 @@ export default function DatasetSandbox() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<EstimateResponse | null>(null);
   const [interpretation, setInterpretation] = useState<string>("");
+  const [runError, setRunError] = useState<string>("");
   const [loadingQuery, setLoadingQuery] = useState(false);
 
   const selectedQuery = queries.find((q) => q.id === selectedId) || null;
@@ -49,6 +50,7 @@ export default function DatasetSandbox() {
     setDataset(null);
     setResult(null);
     setInterpretation("");
+    setRunError("");
 
     axios
       .get<SandboxDatasetPreview>(
@@ -78,12 +80,15 @@ export default function DatasetSandbox() {
     setRunning(true);
     setResult(null);
     setInterpretation("");
+    setRunError("");
 
+    let receivedEstimate = false;
     try {
       const res = await axios.post<EstimateResponse>(
         apiUrl("/sandbox/estimate"),
         { id: selectedQuery.id, method, variables: vars }
       );
+      receivedEstimate = true;
       setResult(res.data);
 
       // Only stream interpretation if we have a real estimate
@@ -114,6 +119,18 @@ export default function DatasetSandbox() {
       const isAuth = err instanceof Error && (err as { status?: number }).status === 401;
       if (isAuth) {
         setInterpretation((err as Error).message);
+        if (!receivedEstimate) setRunError((err as Error).message);
+      } else {
+        const detail = axios.isAxiosError(err) ? err.response?.data?.detail : null;
+        const message =
+          typeof detail === "string"
+            ? detail
+            : "The sandbox could not run this estimate. Try Reset, check the selected variables, and run it again.";
+        if (receivedEstimate) {
+          setInterpretation(message);
+        } else {
+          setRunError(message);
+        }
       }
     } finally {
       setRunning(false);
@@ -125,6 +142,7 @@ export default function DatasetSandbox() {
     setDataset(null);
     setResult(null);
     setInterpretation("");
+    setRunError("");
   }, []);
 
   const handleResetVars = useCallback(() => {
@@ -143,6 +161,7 @@ export default function DatasetSandbox() {
     });
     setResult(null);
     setInterpretation("");
+    setRunError("");
   }, [selectedQuery]);
 
   if (!selectedId || !selectedQuery) {
@@ -158,6 +177,7 @@ export default function DatasetSandbox() {
       vars={vars}
       result={result}
       interpretation={interpretation}
+      errorMessage={runError}
       running={running}
       onBack={handleBack}
       onRun={handleRun}

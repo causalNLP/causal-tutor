@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from .sandbox_models import (
     Query, QueriesResponse, DatasetPreview,
     VariableSelection, EstimateResponse, GroundTruthComparison,
-    InterpretRequest,
+    InterpretRequest, SandboxIssue,
 )
 
 load_dotenv()
@@ -128,47 +128,403 @@ ASSUMPTIONS = {
 
 # ── Method-requirement validation ──────────────────────────────────────
 
-def validate_variables(method: str, v: VariableSelection) -> List[str]:
-    """Return warnings (empty list if OK). Blocking issues return a warning; the estimator then returns estimate=None."""
-    warnings = []
+METHOD_LABELS = {
+    "ols": "OLS",
+    "did": "Difference-in-Differences",
+    "iv": "Instrumental Variables",
+    "rdd": "Regression Discontinuity",
+    "matching": "Propensity Score Matching",
+    "frontdoor": "Front-door",
+}
+
+
+def _issue(
+    severity: str,
+    title: str,
+    message: str,
+    fix_steps: List[str],
+    field: Optional[str] = None,
+) -> SandboxIssue:
+    return SandboxIssue(
+        severity=severity,
+        title=title,
+        message=message,
+        fix_steps=fix_steps,
+        field=field,
+    )
+
+
+def _issue_to_warning(issue: SandboxIssue) -> str:
+    steps = " ".join(f"{i + 1}. {step}" for i, step in enumerate(issue.fix_steps))
+    return f"{issue.title}: {issue.message}" + (f" Steps to fix: {steps}" if steps else "")
+
+
+def _warnings_from_issues(issues: List[SandboxIssue]) -> List[str]:
+    return [_issue_to_warning(issue) for issue in issues]
+
+
+def _field_values(v: VariableSelection) -> List[Tuple[str, Optional[str]]]:
+    return [
+        ("treatment", v.treatment),
+        ("outcome", v.outcome),
+        ("instrument", v.instrument),
+        ("running_var", v.running_var),
+        ("temporal_var", v.temporal_var),
+        ("state_var", v.state_var),
+        ("mediator", v.mediator),
+    ]
+
+
+def _required_columns(method: str, v: VariableSelection) -> List[str]:
+    controls = _controls_for_method(method, v)
+    cols = [v.treatment, v.outcome] + controls
+    if method == "iv" and v.instrument:
+        cols.append(v.instrument)
+    if method == "did":
+        if v.temporal_var:
+            cols.append(v.temporal_var)
+        if v.state_var:
+            cols.append(v.state_var)
+    if method == "rdd" and v.running_var:
+        cols.append(v.running_var)
+    if method == "frontdoor" and v.mediator:
+        cols.append(v.mediator)
+    return _unique_cols([c for c in cols if c])
+
+
+def _numeric_fields(method: str, v: VariableSelection) -> List[Tuple[str, Optional[str]]]:
+    fields = [("treatment", v.treatment), ("outcome", v.outcome)]
+    fields.extend(("controls", c) for c in _controls_for_method(method, v))
+    if method == "iv":
+        fields.append(("instrument", v.instrument))
+    if method == "did":
+        fields.append(("temporal_var", v.temporal_var))
+    if method == "rdd":
+        fields.append(("running_var", v.running_var))
+    if method == "frontdoor":
+        fields.append(("mediator", v.mediator))
+    return fields
+
+
+def _controls_for_method(method: str, v: VariableSelection) -> List[str]:
+    excluded = {
+        v.treatment,
+        v.outcome,
+        v.instrument,
+        v.running_var,
+        v.temporal_var,
+        v.state_var,
+        v.mediator,
+        None,
+        "",
+    }
+
+    controls = []
+    seen = set()
+    for c in v.controls:
+        if not c or c in excluded or c in seen:
+            continue
+        controls.append(c)
+        seen.add(c)
+    return controls
+
+
+def validate_variables(method: str, v: VariableSelection, df: pd.DataFrame) -> List[SandboxIssue]:
+    """Return structured learner-facing issues. Blocking issues prevent estimation."""
+    issues: List[SandboxIssue] = []
+
+    if not v.treatment:
+        issues.append(_issue(
+            "blocking",
+            "Choose a treatment variable",
+            "The treatment is the exposure, policy, or action whose causal effect you want to estimate.",
+            [
+                "Use the Treatment dropdown to choose the column named in the research question.",
+                "If you are using a curated example, click Reset to restore the recommended treatment.",
+            ],
+            "treatment",
+        ))
+    if not v.outcome:
+        issues.append(_issue(
+            "blocking",
+            "Choose an outcome variable",
+            "The outcome is the result that may change because of the treatment.",
+            [
+                "Use the Outcome dropdown to choose the result column named in the research question.",
+                "If you are using a curated example, click Reset to restore the recommended outcome.",
+            ],
+            "outcome",
+        ))
+
     if method == "iv" and not v.instrument:
-        warnings.append("IV requires an instrument variable. Pick one from the dataset.")
+        issues.append(_issue(
+            "blocking",
+            "Choose an instrument for IV",
+            "Instrumental Variables needs a separate column Z that predicts treatment but should not affect the outcome except through treatment.",
+            [
+                "Open the Instrument dropdown.",
+                "Pick the column described as the source of as-if random variation in treatment.",
+                "If you are unsure, click Reset to use the curated instrument for this dataset.",
+            ],
+            "instrument",
+        ))
     if method == "did":
         if not v.temporal_var:
-            warnings.append("DiD requires a time variable (temporal_var).")
+            issues.append(_issue(
+                "blocking",
+                "Choose a time variable for DiD",
+                "Difference-in-Differences compares treated and control units before and after treatment, so it needs a time column.",
+                [
+                    "Open the Time variable dropdown.",
+                    "Choose the year, date, wave, or period column.",
+                    "Click Reset if you want the dataset's recommended DiD setup.",
+                ],
+                "temporal_var",
+            ))
         if not v.state_var:
-            warnings.append("DiD requires a unit/entity variable (state_var).")
+            issues.append(_issue(
+                "blocking",
+                "Choose a unit variable for DiD",
+                "Difference-in-Differences needs an entity column so the model knows which rows belong to the same school, state, person, or other unit.",
+                [
+                    "Open the Unit variable dropdown.",
+                    "Choose the stable entity identifier, such as school_id, state, person_id, or firm_id.",
+                    "Avoid choosing the outcome, treatment, or a numeric control as the unit identifier.",
+                ],
+                "state_var",
+            ))
     if method == "rdd" and not v.running_var:
-        warnings.append("RDD requires a running variable.")
+        issues.append(_issue(
+            "blocking",
+            "Choose a running variable for RDD",
+            "Regression Discontinuity needs the assignment variable that determines which observations fall just below or above the cutoff.",
+            [
+                "Open the Running var dropdown.",
+                "Choose the score, index, age, income, GPA, or other assignment column used for the cutoff rule.",
+                "Enter the cutoff if you know it, or leave it blank to use the dataset median.",
+            ],
+            "running_var",
+        ))
     if method == "frontdoor" and not v.mediator:
-        warnings.append("Frontdoor requires a mediator variable.")
-    if method == "matching" and not v.controls:
-        warnings.append("Matching requires at least one covariate.")
-    return warnings
+        issues.append(_issue(
+            "blocking",
+            "Choose a mediator for front-door",
+            "Front-door estimation needs a mediator M on the causal pathway from treatment to outcome.",
+            [
+                "Open the Mediator dropdown.",
+                "Pick a post-treatment column that the treatment changes and that then affects the outcome.",
+                "Do not choose a pre-treatment control or the outcome itself as the mediator.",
+            ],
+            "mediator",
+        ))
+    if method == "matching" and not _controls_for_method(method, v):
+        issues.append(_issue(
+            "blocking",
+            "Choose covariates for matching",
+            "Propensity score matching needs observed pre-treatment covariates to compare treated and untreated units that look similar.",
+            [
+                "Check at least one covariate in the Controls list.",
+                "Prefer variables measured before treatment that predict treatment and outcome.",
+                "Do not use the treatment, outcome, or post-treatment variables as controls.",
+            ],
+            "controls",
+        ))
+
+    role_values = [
+        ("treatment", v.treatment),
+        ("outcome", v.outcome),
+    ]
+    if method == "iv":
+        role_values.append(("instrument", v.instrument))
+    if method == "did":
+        role_values.extend([("time variable", v.temporal_var), ("unit variable", v.state_var)])
+    if method == "rdd":
+        role_values.append(("running variable", v.running_var))
+    if method == "frontdoor":
+        role_values.append(("mediator", v.mediator))
+
+    by_column: Dict[str, List[str]] = {}
+    for role, col in role_values:
+        if col:
+            by_column.setdefault(col, []).append(role)
+    duplicated_roles = {col: roles for col, roles in by_column.items() if len(roles) > 1}
+    if duplicated_roles:
+        details = "; ".join(f"{col} is selected as {', '.join(roles)}" for col, roles in duplicated_roles.items())
+        issues.append(_issue(
+            "blocking",
+            "A variable is assigned to more than one role",
+            f"Each causal role needs its own column. {details}.",
+            [
+                "Choose separate columns for treatment, outcome, and method-specific variables.",
+                "If you are exploring, change one selector at a time and run again.",
+                "Click Reset to restore the curated variable roles.",
+            ],
+        ))
+
+    selected_missing = [
+        (field, value)
+        for field, value in _field_values(v)
+        if value and value not in df.columns
+    ]
+    selected_missing.extend(("controls", c) for c in v.controls if c not in df.columns)
+    if selected_missing:
+        missing_names = ", ".join(sorted({value for _, value in selected_missing if value}))
+        issues.append(_issue(
+            "blocking",
+            "One or more selected columns are not in the dataset",
+            f"The current dataset does not contain: {missing_names}. This can happen after switching examples or changing methods.",
+            [
+                "Click Reset to restore variables from the selected example.",
+                "Or choose replacement variables from the visible dataset columns.",
+            ],
+        ))
+        return issues
+
+    if any(issue.severity == "blocking" for issue in issues):
+        return issues
+
+    non_numeric = []
+    for field, col in _numeric_fields(method, v):
+        if col and col in df.columns and not pd.api.types.is_numeric_dtype(df[col]):
+            non_numeric.append((field, col))
+    if non_numeric:
+        bad = ", ".join(sorted({col for _, col in non_numeric}))
+        issues.append(_issue(
+            "blocking",
+            "Use numeric variables for this estimator",
+            f"The estimator needs numeric columns, but these selected columns are not numeric: {bad}.",
+            [
+                "Choose numeric columns from the dataset table.",
+                "For DiD, the unit variable may be text, but treatment, outcome, controls, and time should be numeric.",
+                "Click Reset to restore a working variable set for the curated example.",
+            ],
+        ))
+
+    required = _required_columns(method, v)
+    if required and df[required].dropna().empty:
+        issues.append(_issue(
+            "blocking",
+            "No usable rows after removing missing values",
+            "After keeping only the selected variables, every row has at least one missing value.",
+            [
+                "Remove controls that have many blank values.",
+                "Choose variables with visible non-missing values in the dataset preview.",
+                "Click Reset to restore the curated variables.",
+            ],
+        ))
+
+    if method in {"matching", "did", "rdd"} and v.treatment in df.columns:
+        treatment_values = set(df[v.treatment].dropna().unique().tolist())
+        if treatment_values != {0, 1}:
+            issues.append(_issue(
+                "blocking",
+                "Treatment must be a 0/1 indicator",
+                f"{METHOD_LABELS[method]} needs a treatment column with exactly two values: 0 for untreated and 1 for treated.",
+                [
+                    "Choose a binary treatment column with both 0 and 1 values.",
+                    "Check the dataset preview to confirm both groups appear.",
+                    "Click Reset to restore the recommended treatment.",
+                ],
+                "treatment",
+            ))
+
+    if method == "rdd" and v.running_var and v.running_var in df.columns and pd.api.types.is_numeric_dtype(df[v.running_var]):
+        c = v.cutoff if v.cutoff is not None else float(df[v.running_var].median())
+        sigma = float(df[v.running_var].std())
+        n = len(df)
+        h = 1.06 * sigma * (n ** (-1 / 5)) if n > 0 else 0
+        if not math.isfinite(h) or h <= 0:
+            issues.append(_issue(
+                "blocking",
+                "RDD needs variation around the cutoff",
+                "The running variable has too little variation to build a local comparison around the cutoff.",
+                [
+                    "Choose a running variable with many different numeric values.",
+                    "Check that the cutoff is inside the range shown in the data.",
+                    "Click Reset to use the curated running variable and cutoff.",
+                ],
+                "running_var",
+            ))
+        else:
+            window = df[(df[v.running_var] >= c - h) & (df[v.running_var] <= c + h)]
+            if len(window) < 10:
+                issues.append(_issue(
+                    "blocking",
+                    "RDD has too few observations near the cutoff",
+                    "The local bandwidth around the cutoff contains too few rows to estimate the jump reliably.",
+                    [
+                        "Check that the cutoff is correct and inside the running variable's range.",
+                        "Try leaving the cutoff blank so the sandbox uses the median.",
+                        "Click Reset to restore the curated RDD setup.",
+                    ],
+                    "cutoff",
+                ))
+            elif window[v.running_var].lt(c).sum() == 0 or window[v.running_var].ge(c).sum() == 0:
+                issues.append(_issue(
+                    "blocking",
+                    "RDD needs observations on both sides of the cutoff",
+                    "The local comparison window only contains observations from one side of the cutoff.",
+                    [
+                        "Check that the cutoff is inside the running variable's range.",
+                        "Try leaving the cutoff blank so the sandbox uses the median.",
+                        "Choose a running variable with observations just below and just above the cutoff.",
+                    ],
+                    "cutoff",
+                ))
+
+    return issues
 
 
-def _blocking(method: str, warnings: List[str]) -> bool:
-    """Check if warnings block estimation."""
-    for w in warnings:
-        if "requires" in w:
-            return True
-    return False
+def _blocking(method: str, issues: List[SandboxIssue]) -> bool:
+    """Check if issues block estimation."""
+    return any(issue.severity == "blocking" for issue in issues)
 
 
 # ── Estimators ────────────────────────────────────────────────────────
 
 def _sanitize_cols(df: pd.DataFrame, cols: List[str]) -> List[str]:
-    return [c for c in cols if c in df.columns]
+    out = []
+    seen = set()
+    for c in cols:
+        if c in df.columns and c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
+def _unique_cols(cols: List[str]) -> List[str]:
+    out = []
+    seen = set()
+    for c in cols:
+        if c and c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
+def _clean_numeric_frame(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+    cols = _unique_cols(cols)
+    cleaned = df[cols].dropna().copy()
+    if cleaned.empty:
+        raise ValueError("No usable observations after dropping rows with missing selected variables.")
+    return cleaned.astype(float)
+
+
+def _require_min_rows(df: pd.DataFrame, min_rows: int, method_label: str) -> None:
+    if len(df) < min_rows:
+        raise ValueError(f"{method_label} needs at least {min_rows} usable observations after filtering.")
 
 
 def estimate_ols(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     import statsmodels.api as sm
 
-    controls = _sanitize_cols(df, v.controls)
+    controls = _sanitize_cols(df, _controls_for_method("ols", v))
     X_cols = [v.treatment] + controls
-    X = df[X_cols].astype(float)
-    X = sm.add_constant(X)
-    y = df[v.outcome].astype(float)
+    df_clean = _clean_numeric_frame(df, [v.outcome] + X_cols)
+    _require_min_rows(df_clean, max(3, len(X_cols) + 2), "OLS")
+    X = df_clean[X_cols]
+    X = sm.add_constant(X, has_constant="add")
+    y = df_clean[v.outcome]
 
     model = sm.OLS(y, X).fit()
     t_idx = X.columns.get_loc(v.treatment)
@@ -197,19 +553,29 @@ def estimate_ols(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
         "ci_low": float(ci[0]),
         "ci_high": float(ci[1]),
         "p_value": pval,
-        "n_obs": int(len(df)),
+        "n_obs": int(len(df_clean)),
         "plot_type": "forest",
         "plot_data": {"terms": terms},
     }
 
 
 def estimate_did(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
-    import statsmodels.formula.api as smf
+    import statsmodels.api as sm
+
+    controls = _sanitize_cols(df, _controls_for_method("did", v))
+    model_cols = [v.outcome, v.treatment, v.temporal_var, v.state_var] + controls
+    df = df[model_cols].dropna().copy()
+    _require_min_rows(df, max(6, len(controls) + 4), "Difference-in-Differences")
+    df[v.treatment] = df[v.treatment].astype(float)
+    df[v.outcome] = df[v.outcome].astype(float)
+    if controls:
+        df[controls] = df[controls].astype(float)
 
     # Identify treated units
     unit_max = df.groupby(v.state_var)[v.treatment].max()
     treated_units = unit_max[unit_max == 1].index
-    df = df.copy()
+    if len(treated_units) == 0 or len(treated_units) == len(unit_max):
+        raise ValueError("DiD needs at least one ever-treated unit and one never-treated control unit.")
     df["__treated_group__"] = df[v.state_var].isin(treated_units).astype(int)
 
     # Treatment start: earliest time where any unit has T=1
@@ -218,22 +584,22 @@ def estimate_did(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     else:
         treatment_start = int(df[v.temporal_var].median())
 
-    # TWFE regression with treatment-period interaction
-    # Rename columns to avoid patsy issues with spaces
-    df_f = df.rename(columns={v.treatment: "T", v.outcome: "Y", v.temporal_var: "TIME", v.state_var: "UNIT"})
-    controls = _sanitize_cols(df, v.controls)
-    for c in controls:
-        df_f = df_f.rename(columns={c: f"C_{c}"}) if c in df_f.columns else df_f
-    c_formula = " + ".join(f"C_{c}" for c in controls) if controls else ""
-    formula = "Y ~ T + C(UNIT) + C(TIME)"
-    if c_formula:
-        formula += f" + {c_formula}"
-    model = smf.ols(formula=formula, data=df_f).fit()
+    # TWFE regression: build the design matrix directly so arbitrary column
+    # names and user role-switching cannot break a Patsy formula.
+    X_parts = [df[[v.treatment]].astype(float).rename(columns={v.treatment: "__treatment__"})]
+    if controls:
+        X_parts.append(df[controls].astype(float))
+    X_parts.append(pd.get_dummies(df[v.state_var], prefix="unit", drop_first=True, dtype=float))
+    X_parts.append(pd.get_dummies(df[v.temporal_var], prefix="time", drop_first=True, dtype=float))
+    X = pd.concat(X_parts, axis=1)
+    X = sm.add_constant(X, has_constant="add")
+    y = df[v.outcome].astype(float)
+    model = sm.OLS(y, X).fit()
 
-    coef = float(model.params["T"])
-    se = float(model.bse["T"])
-    pval = float(model.pvalues["T"])
-    ci = model.conf_int().loc["T"].tolist()
+    coef = float(model.params["__treatment__"])
+    se = float(model.bse["__treatment__"])
+    pval = float(model.pvalues["__treatment__"])
+    ci = model.conf_int().loc["__treatment__"].tolist()
 
     # Parallel trends plot data
     periods = sorted(df[v.temporal_var].unique())
@@ -246,9 +612,9 @@ def estimate_did(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
 
     # Parallel trends violation check on pre-treatment periods
     pre_periods = [t for t in periods if t < treatment_start]
-    pt_warning, pt_diag = _check_parallel_trends(df, v, pre_periods, treated_mean, control_mean, periods)
+    pt_issue, pt_diag = _check_parallel_trends(df, v, pre_periods, treated_mean, control_mean, periods)
 
-    warnings_extra = [pt_warning] if pt_warning else []
+    issues_extra = [pt_issue] if pt_issue else []
 
     return {
         "estimate": coef,
@@ -265,13 +631,23 @@ def estimate_did(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
             "treatment_start": treatment_start,
             "diagnostics": pt_diag,
         },
-        "_extra_warnings": warnings_extra,
+        "_extra_issues": issues_extra,
     }
 
 
-def _check_parallel_trends(df, v, pre_periods, treated_mean, control_mean, periods) -> Tuple[Optional[str], Dict[str, Any]]:
+def _check_parallel_trends(df, v, pre_periods, treated_mean, control_mean, periods) -> Tuple[Optional[SandboxIssue], Dict[str, Any]]:
     if len(pre_periods) < 2:
-        return "Parallel trends unidentified (fewer than 2 pre-treatment periods).", {}
+        return _issue(
+            "warning",
+            "Parallel trends cannot be checked",
+            "DiD needs at least two pre-treatment periods to compare the treated and control trends before treatment.",
+            [
+                "Use a panel dataset with more pre-treatment time periods if available.",
+                "Treat this estimate as a demonstration, not strong evidence, until pre-trends can be assessed.",
+                "Inspect the diagnostic plot and ask whether the groups looked similar before treatment.",
+            ],
+            "temporal_var",
+        ), {}
 
     pre_idx = [periods.index(t) for t in pre_periods]
     t_arr = np.array(pre_periods, dtype=float)
@@ -301,7 +677,16 @@ def _check_parallel_trends(df, v, pre_periods, treated_mean, control_mean, perio
 
     if pooled_sd > 0 and (delta / pooled_sd) > 0.1:
         pct = int(round((delta / pooled_sd) * 100))
-        return f"Parallel trends likely violated (slope diff {delta:.2f}, {pct}% of outcome SD).", diag
+        return _issue(
+            "warning",
+            "Parallel trends may be violated",
+            f"Before treatment, the treated and control trends differ by {delta:.2f}, about {pct}% of the outcome standard deviation.",
+            [
+                "Inspect the parallel-trends plot before interpreting the estimate causally.",
+                "Try adding relevant pre-treatment controls if the dataset supports them.",
+                "Consider a different comparison group or method if the pre-treatment trends are not similar.",
+            ],
+        ), diag
     return None, diag
 
 
@@ -309,12 +694,14 @@ def estimate_iv(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     from linearmodels.iv import IV2SLS
     import statsmodels.api as sm
 
-    controls = _sanitize_cols(df, v.controls)
-    df_clean = df[[v.outcome, v.treatment, v.instrument] + controls].dropna().astype(float)
+    controls = _sanitize_cols(df, _controls_for_method("iv", v))
+    df_clean = _clean_numeric_frame(df, [v.outcome, v.treatment, v.instrument] + controls)
+    _require_min_rows(df_clean, max(10, len(controls) + 4), "IV")
+    if df_clean[v.instrument].nunique() < 2:
+        raise ValueError("IV needs an instrument with variation; the selected instrument is constant after filtering.")
 
     # IV2SLS: Y ~ 1 + controls + [T ~ Z]
-    exog_cols = ["const"] + controls
-    exog = sm.add_constant(df_clean[controls]) if controls else pd.DataFrame({"const": np.ones(len(df_clean))}, index=df_clean.index)
+    exog = sm.add_constant(df_clean[controls], has_constant="add") if controls else pd.DataFrame({"const": np.ones(len(df_clean))}, index=df_clean.index)
     endog = df_clean[[v.treatment]]
     instruments = df_clean[[v.instrument]]
     dep = df_clean[v.outcome]
@@ -328,7 +715,7 @@ def estimate_iv(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     ci_high = float(ci_arr.iloc[1])
 
     # First-stage F (regress T on Z + controls)
-    X_fs = sm.add_constant(df_clean[[v.instrument] + controls])
+    X_fs = sm.add_constant(df_clean[[v.instrument] + controls], has_constant="add")
     fs_model = sm.OLS(df_clean[v.treatment], X_fs).fit()
     # F-test for instrument being zero
     f_stat = float(fs_model.tvalues[v.instrument] ** 2)
@@ -353,7 +740,17 @@ def estimate_iv(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
 
     extras = []
     if f_stat < 10:
-        extras.append(f"Weak instrument: first-stage F = {f_stat:.2f} (< 10). Estimate may be biased.")
+        extras.append(_issue(
+            "warning",
+            "Instrument looks weak",
+            f"The first-stage F-statistic is {f_stat:.2f}, below the common rule-of-thumb threshold of 10.",
+            [
+                "Interpret the IV estimate cautiously because weak instruments can make estimates biased and unstable.",
+                "Try a stronger instrument if the dataset has one.",
+                "Use the first-stage plot to check whether the instrument visibly predicts the treatment.",
+            ],
+            "instrument",
+        ))
 
     return {
         "estimate": coef,
@@ -370,7 +767,7 @@ def estimate_iv(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
             "instrument": v.instrument,
             "treatment": v.treatment,
         },
-        "_extra_warnings": extras,
+        "_extra_issues": extras,
     }
 
 
@@ -378,21 +775,28 @@ def estimate_rdd(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     import statsmodels.api as sm
 
     R = v.running_var
-    c = v.cutoff if v.cutoff is not None else float(df[R].median())
+    df_clean = _clean_numeric_frame(df, [v.outcome, v.treatment, R])
+    _require_min_rows(df_clean, 10, "RDD")
+    c = v.cutoff if v.cutoff is not None else float(df_clean[R].median())
 
     # Bandwidth: Silverman's rule
-    sigma = float(df[R].std())
-    n = len(df)
+    sigma = float(df_clean[R].std())
+    n = len(df_clean)
     h = 1.06 * sigma * (n ** (-1 / 5))
+    if not math.isfinite(h) or h <= 0:
+        raise ValueError("RDD needs variation in the running variable.")
 
-    window = df[(df[R] >= c - h) & (df[R] <= c + h)].copy()
+    window = df_clean[(df_clean[R] >= c - h) & (df_clean[R] <= c + h)].copy()
+    _require_min_rows(window, 10, "RDD")
     window["__above__"] = (window[R] >= c).astype(int)
+    if window["__above__"].nunique() < 2:
+        raise ValueError("RDD needs observations on both sides of the cutoff within the local bandwidth.")
     window["__R_centered__"] = window[R] - c
     window["__interaction__"] = window["__above__"] * window["__R_centered__"]
 
     # Local linear: Y = a + b*above + gamma*(R-c) + delta*above*(R-c) + errors
-    X = sm.add_constant(window[["__above__", "__R_centered__", "__interaction__"]])
-    y = window[v.outcome].astype(float)
+    X = sm.add_constant(window[["__above__", "__R_centered__", "__interaction__"]], has_constant="add")
+    y = window[v.outcome]
     model = sm.OLS(y, X).fit()
 
     # Identify which side is treated by correlating above with treatment
@@ -415,9 +819,10 @@ def estimate_rdd(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
 
     # Discontinuity plot: binned scatter + two fits
     n_bins = 20
-    bins = np.linspace(df[R].min(), df[R].max(), n_bins + 1)
-    df["__bin__"] = pd.cut(df[R], bins, include_lowest=True)
-    binned = df.groupby("__bin__").agg(r=(R, "mean"), y=(v.outcome, "mean")).dropna().reset_index(drop=True)
+    plot_df = df_clean.copy()
+    bins = np.linspace(plot_df[R].min(), plot_df[R].max(), n_bins + 1)
+    plot_df["__bin__"] = pd.cut(plot_df[R], bins, include_lowest=True)
+    binned = plot_df.groupby("__bin__").agg(r=(R, "mean"), y=(v.outcome, "mean")).dropna().reset_index(drop=True)
     scatter = [{"r": float(row["r"]), "y": float(row["y"])} for _, row in binned.iterrows()]
 
     # Fit lines over window
@@ -454,10 +859,16 @@ def estimate_matching(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]:
     from sklearn.linear_model import LogisticRegression
     from sklearn.neighbors import NearestNeighbors
 
-    controls = _sanitize_cols(df, v.controls)
-    X = df[controls].astype(float).values
-    T = df[v.treatment].astype(int).values
-    Y = df[v.outcome].astype(float).values
+    controls = _sanitize_cols(df, _controls_for_method("matching", v))
+    df_clean = _clean_numeric_frame(df, [v.outcome, v.treatment] + controls)
+    _require_min_rows(df_clean, 10, "Matching")
+    X = df_clean[controls].values
+    T_raw = df_clean[v.treatment].values
+    unique_t = set(np.unique(T_raw).tolist())
+    if unique_t != {0, 1}:
+        raise ValueError("Matching needs a binary treatment column with exactly 0 and 1 values after filtering.")
+    T = T_raw.astype(int)
+    Y = df_clean[v.outcome].values
 
     # Fit propensity score
     pmodel = LogisticRegression(max_iter=1000).fit(X, T)
@@ -530,18 +941,19 @@ def estimate_frontdoor(df: pd.DataFrame, v: VariableSelection) -> Dict[str, Any]
     M = v.mediator
     T = v.treatment
     Y = v.outcome
-    controls = _sanitize_cols(df, v.controls)
+    controls = _sanitize_cols(df, _controls_for_method("frontdoor", v))
 
-    df_clean = df[[T, M, Y] + controls].dropna().astype(float)
+    df_clean = _clean_numeric_frame(df, [T, M, Y] + controls)
+    _require_min_rows(df_clean, max(10, len(controls) + 4), "Front-door")
 
     # Stage 1: M ~ T (+ controls) → coef a
-    X1 = sm.add_constant(df_clean[[T] + controls])
+    X1 = sm.add_constant(df_clean[[T] + controls], has_constant="add")
     m1 = sm.OLS(df_clean[M], X1).fit()
     a = float(m1.params[T])
     a_se = float(m1.bse[T])
 
     # Stage 2: Y ~ M + T (+ controls) → coef b on M
-    X2 = sm.add_constant(df_clean[[M, T] + controls])
+    X2 = sm.add_constant(df_clean[[M, T] + controls], has_constant="add")
     m2 = sm.OLS(df_clean[Y], X2).fit()
     b = float(m2.params[M])
     b_se = float(m2.bse[M])
@@ -587,6 +999,90 @@ ESTIMATORS = {
 }
 
 
+def _estimation_failure_issue(method: str, exc: Exception) -> SandboxIssue:
+    detail = str(exc)[:200] or exc.__class__.__name__
+    lower = detail.lower()
+
+    if "could not convert" in lower or "astype" in lower:
+        return _issue(
+            "blocking",
+            "One selected variable cannot be used as a number",
+            "This estimator needs numeric columns for the selected treatment, outcome, controls, and method-specific variables.",
+            [
+                "Check the selected variables against the dataset preview.",
+                "Replace text columns with numeric columns, except for the DiD unit identifier.",
+                f"If this still fails, Technical Detail: {detail}",
+            ],
+        )
+    if "0 sample" in lower or "empty" in lower or "zero-size" in lower or "no observations" in lower:
+        return _issue(
+            "blocking",
+            "No usable observations for this method",
+            "After the sandbox applied the method's filtering rules, there were not enough rows left to estimate the effect.",
+            [
+                "Remove controls with many missing values.",
+                "Choose variables that have visible data in the preview.",
+                f"If this still fails, Technical Detail: {detail}",
+            ],
+        )
+    if "needs at least" in lower or "needs observations" in lower or "needs a binary" in lower or "needs an instrument with variation" in lower:
+        return _issue(
+            "blocking",
+            "The selected variables do not meet this method's data requirements",
+            detail,
+            [
+                "Click Reset to restore the curated variable choices.",
+                "Check that the method-specific variable is different from treatment, outcome, and controls.",
+                "Use variables with enough non-missing rows and variation.",
+            ],
+        )
+    if "only one class" in lower:
+        return _issue(
+            "blocking",
+            "Matching needs both treated and untreated units",
+            "The selected treatment column only has one group after filtering, so matching cannot form treated-control pairs.",
+            [
+                "Choose a binary treatment column with both 0 and 1 values.",
+                "Remove controls that drop one group because of missing values.",
+                f"If this still fails, Technical Detail: {detail}",
+            ],
+            "treatment",
+        )
+    if "singular" in lower or "rank" in lower or "collinear" in lower:
+        return _issue(
+            "blocking",
+            "The selected variables duplicate too much information",
+            "The model cannot separate the effect because some selected variables are perfectly or nearly perfectly redundant.",
+            [
+                "Remove one or more controls that measure the same thing.",
+                "Do not include the treatment itself as a control.",
+                f"If this still fails, Technical Detail: {detail}",
+            ],
+        )
+    if "not defined" in lower or "nameerror" in lower:
+        return _issue(
+            "blocking",
+            "The model received a stale variable name",
+            "A variable name from an earlier selection was still being used when the estimator ran.",
+            [
+                "Click Reset to restore the curated variable choices.",
+                "If you changed methods, re-check the method-specific fields and controls.",
+                f"If this still fails, Technical Detail: {detail}",
+            ],
+        )
+
+    return _issue(
+        "blocking",
+        f"{METHOD_LABELS.get(method, method.upper())} could not run",
+        "The estimator failed after the variables passed the basic checks.",
+        [
+            "Click Reset to restore the curated variable choices.",
+            "If you changed variables, try one change at a time and run again.",
+            f"If this still fails, Technical Detail: {detail}",
+        ],
+    )
+
+
 def estimate(qid: str, method: str, variables: VariableSelection) -> EstimateResponse:
     q = get_query_by_id(qid)
     if q is None:
@@ -596,38 +1092,44 @@ def estimate(qid: str, method: str, variables: VariableSelection) -> EstimateRes
     if method not in ESTIMATORS:
         raise ValueError(f"Unknown method: {method}")
 
-    warnings = validate_variables(method, variables)
     gt = GroundTruthComparison(effect=q.effect)
+    df = load_df(q.dataset_path)
+    issues = validate_variables(method, variables, df)
+    warnings = _warnings_from_issues(issues)
 
-    if _blocking(method, warnings):
+    if _blocking(method, issues):
         return EstimateResponse(
             method=method,
             n_obs=0,
             ground_truth=gt,
             warnings=warnings,
+            issues=issues,
             assumptions=ASSUMPTIONS[method],
             plot_type="none",
             plot_data={},
         )
-
-    df = load_df(q.dataset_path)
 
     try:
         out = ESTIMATORS[method](df, variables)
     except Exception as e:
+        failure = _estimation_failure_issue(method, e)
+        failed_issues = issues + [failure]
         return EstimateResponse(
             method=method,
             n_obs=int(len(df)),
             ground_truth=gt,
-            warnings=warnings + [f"Estimation error: {str(e)[:200]}"],
+            warnings=_warnings_from_issues(failed_issues),
+            issues=failed_issues,
             assumptions=ASSUMPTIONS[method],
             plot_type="none",
             plot_data={},
         )
 
-    # Merge extra warnings from estimator
-    extra = out.pop("_extra_warnings", [])
-    warnings.extend(extra)
+    # Merge extra warnings/issues from estimator.
+    extra_issues = out.pop("_extra_issues", [])
+    extra_warnings = out.pop("_extra_warnings", [])
+    issues.extend(extra_issues)
+    warnings = _warnings_from_issues(issues) + extra_warnings
 
     # Ground-truth comparison
     est = out.get("estimate")
@@ -642,6 +1144,7 @@ def estimate(qid: str, method: str, variables: VariableSelection) -> EstimateRes
         method=method,
         ground_truth=gt,
         warnings=warnings,
+        issues=issues,
         assumptions=ASSUMPTIONS[method],
         **out,
     )

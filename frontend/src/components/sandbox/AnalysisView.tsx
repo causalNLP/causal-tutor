@@ -29,6 +29,7 @@ interface AnalysisViewProps {
   result: EstimateResponse | null;
   interpretation: string;
   running: boolean;
+  errorMessage?: string;
   onBack: () => void;
   onRun: () => void;
   onReset: () => void;
@@ -37,7 +38,7 @@ interface AnalysisViewProps {
 }
 
 export default function AnalysisView(props: AnalysisViewProps) {
-  const { query, dataset, loadingDataset, method, vars, result, interpretation, running,
+  const { query, dataset, loadingDataset, method, vars, result, interpretation, running, errorMessage,
     onBack, onRun, onReset, onMethodChange, onVarsChange } = props;
 
   const methodStyle = METHOD_STYLES[method] || { label: method.toUpperCase(), bg: "bg-slate-100", text: "text-slate-700" };
@@ -119,7 +120,12 @@ export default function AnalysisView(props: AnalysisViewProps) {
         </div>
 
         {/* Results */}
-        <ResultsPanel result={result} interpretation={interpretation} running={running} />
+        <ResultsPanel
+          result={result}
+          interpretation={interpretation}
+          running={running}
+          errorMessage={errorMessage}
+        />
       </div>
     </div>
   );

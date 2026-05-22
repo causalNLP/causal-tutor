@@ -147,6 +147,14 @@ export interface GroundTruthComparison {
   within_ci: boolean | null;
 }
 
+export interface SandboxIssue {
+  severity: "blocking" | "warning" | "info";
+  title: string;
+  message: string;
+  fix_steps: string[];
+  field: string | null;
+}
+
 export interface ForestTerm {
   name: string;
   coef: number;
@@ -217,6 +225,7 @@ export interface EstimateResponse {
   n_obs: number;
   ground_truth: GroundTruthComparison;
   warnings: string[];
+  issues?: SandboxIssue[];
   assumptions: string[];
   plot_type: string;
   plot_data: Record<string, unknown>;

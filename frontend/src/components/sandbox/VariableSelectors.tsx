@@ -13,6 +13,12 @@ const METHODS: { value: string; label: string }[] = [
   { value: "frontdoor", label: "Front-door Criterion" },
 ];
 
+interface Guidance {
+  title: string;
+  message: string;
+  steps: string[];
+}
+
 interface VariableSelectorsProps {
   columns: string[];
   method: string;
@@ -41,6 +47,7 @@ export default function VariableSelectors({
   const needsPanelVars = method === "did";
   const needsMediator = method === "frontdoor";
 
+  /*
   const warning = useMemo(() => {
     if (needsInstrument && !vars.instrument)
       return "IV requires an instrument. Pick a column whose variation is plausibly random (unaffected by unobserved confounders).";
@@ -54,8 +61,102 @@ export default function VariableSelectors({
       return "Matching requires at least one covariate to build the propensity score.";
     return null;
   }, [method, vars, needsInstrument, needsRunningVar, needsPanelVars, needsMediator]);
+  */
 
-  const runDisabled = running || warning !== null || !vars.treatment || !vars.outcome;
+  const controlExclusions = new Set(
+    [
+      vars.treatment,
+      vars.outcome,
+      vars.instrument,
+      vars.running_var,
+      vars.temporal_var,
+      vars.state_var,
+      vars.mediator,
+    ].filter(Boolean)
+  );
+  const effectiveControls = vars.controls.filter((c) => !controlExclusions.has(c));
+
+  const guidance = useMemo<Guidance | null>(() => {
+    if (!vars.treatment)
+      return {
+        title: "Choose a treatment variable",
+        message: "The treatment is the exposure, policy, or action whose causal effect you want to estimate.",
+        steps: [
+          "Use the Treatment dropdown to choose the column named in the research question.",
+          "Click Reset if you want the recommended variable for this example.",
+        ],
+      };
+    if (!vars.outcome)
+      return {
+        title: "Choose an outcome variable",
+        message: "The outcome is the result that may change because of the treatment.",
+        steps: [
+          "Use the Outcome dropdown to choose the result column named in the research question.",
+          "Click Reset if you want the recommended variable for this example.",
+        ],
+      };
+    if (needsInstrument && !vars.instrument)
+      return {
+        title: "Choose an instrument for IV",
+        message:
+          "IV needs a separate column Z that predicts treatment but should not directly affect the outcome.",
+        steps: [
+          "Open the Instrument dropdown.",
+          "Pick the column described as as-if random variation in treatment.",
+          "Use Reset to restore the curated instrument if you are unsure.",
+        ],
+      };
+    if (needsRunningVar && !vars.running_var)
+      return {
+        title: "Choose a running variable for RDD",
+        message:
+          "RDD compares observations just below and just above an assignment cutoff.",
+        steps: [
+          "Open the Running var dropdown.",
+          "Pick the score, index, GPA, age, or other assignment column.",
+          "Enter the cutoff if known, or leave it blank to use the median.",
+        ],
+      };
+    if (needsPanelVars && (!vars.temporal_var || !vars.state_var))
+      return {
+        title: "Choose DiD panel variables",
+        message:
+          "DiD needs both a time column and a stable unit/entity column to compare before-after changes.",
+        steps: [
+          "Choose a year, date, wave, or period column for Time variable.",
+          "Choose a stable entity ID, such as school_id or state, for Unit variable.",
+          "Use Reset to restore the curated DiD setup.",
+        ],
+      };
+    if (needsMediator && !vars.mediator)
+      return {
+        title: "Choose a mediator for front-door",
+        message:
+          "Front-door needs a post-treatment mediator on the pathway from treatment to outcome.",
+        steps: [
+          "Open the Mediator dropdown.",
+          "Pick a column that treatment changes and that then affects the outcome.",
+          "Avoid pre-treatment controls and the outcome itself.",
+        ],
+      };
+    if (
+      method === "matching" &&
+      effectiveControls.length === 0
+    )
+      return {
+        title: "Choose covariates for matching",
+        message:
+          "Matching needs pre-treatment covariates to compare treated and untreated units that look similar.",
+        steps: [
+          "Check at least one variable in Controls.",
+          "Prefer variables measured before treatment that predict treatment and outcome.",
+          "Do not use treatment, outcome, or post-treatment variables as controls.",
+        ],
+      };
+    return null;
+  }, [method, vars, effectiveControls.length, needsInstrument, needsRunningVar, needsPanelVars, needsMediator]);
+
+  const runDisabled = running || guidance !== null || !vars.treatment || !vars.outcome;
 
   const toggleControl = (c: string) => {
     if (vars.controls.includes(c)) {
@@ -139,7 +240,7 @@ export default function VariableSelectors({
         </label>
         <div className="max-h-28 overflow-y-auto custom-scrollbar border border-slate-200 rounded-lg p-2 bg-slate-50/50 space-y-1">
           {columns
-            .filter((c) => c !== vars.treatment && c !== vars.outcome)
+            .filter((c) => !controlExclusions.has(c))
             .map((c) => (
               <label key={c} className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-white px-1.5 py-0.5 rounded">
                 <input
@@ -259,11 +360,19 @@ export default function VariableSelectors({
         </div>
       )}
 
-      {/* Warning */}
-      {warning && (
+      {/* Guidance */}
+      {guidance && (
         <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 flex items-start gap-2">
           <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
-          <span className="text-xs text-amber-800 leading-relaxed">{warning}</span>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-amber-900">{guidance.title}</div>
+            <p className="text-xs text-amber-800 leading-relaxed mt-0.5">{guidance.message}</p>
+            <ol className="list-decimal list-inside text-xs text-amber-900 mt-1.5 space-y-0.5">
+              {guidance.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
 

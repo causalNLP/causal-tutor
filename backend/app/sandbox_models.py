@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 
@@ -64,6 +64,14 @@ class GroundTruthComparison(BaseModel):
     within_ci: Optional[bool] = None
 
 
+class SandboxIssue(BaseModel):
+    severity: Literal["blocking", "warning", "info"]
+    title: str
+    message: str
+    fix_steps: List[str] = Field(default_factory=list)
+    field: Optional[str] = None
+
+
 class EstimateResponse(BaseModel):
     method: str
     estimate: Optional[float] = None
@@ -74,6 +82,7 @@ class EstimateResponse(BaseModel):
     n_obs: int = 0
     ground_truth: GroundTruthComparison
     warnings: List[str] = Field(default_factory=list)
+    issues: List[SandboxIssue] = Field(default_factory=list)
     assumptions: List[str] = Field(default_factory=list)
     plot_type: str
     plot_data: Dict[str, Any] = Field(default_factory=dict)
