@@ -162,15 +162,17 @@ function DAGNode({ id, data, selected }: NodeProps) {
           aria-label="Delete node"
           title="Delete node"
           onPointerDown={(event) => {
+            event.preventDefault();
             event.stopPropagation();
+            onDelete?.(id);
           }}
           onMouseDown={(event) => {
+            event.preventDefault();
             event.stopPropagation();
           }}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            onDelete?.(id);
           }}
           className="nodrag nopan absolute -top-3 -right-3 z-30 w-5 h-5 rounded-full bg-white border border-rose-200 text-rose-600 shadow-md hover:bg-rose-50 hover:border-rose-300 transition-colors flex items-center justify-center pointer-events-auto"
         >
@@ -628,6 +630,27 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
     [setEdges]
   );
 
+  const clearNodeDependentState = useCallback((nodeId: string) => {
+    setTreatmentId((id) => (id === nodeId ? null : id));
+    setOutcomeId((id) => (id === nodeId ? null : id));
+    setConfounderIds((ids) => ids.filter((id) => id !== nodeId));
+    setPathsResult(null);
+    setDSepResult(null);
+    setEdgeAnalysis(null);
+    setDagAnalysis(null);
+    setShowEdgePanel(false);
+    setShowAnalysisModal(false);
+    setSelectedEdgeLabel("");
+    setSelectedNodeForPath((id) => (id === nodeId ? null : id));
+    setConditioningSet((ids) => ids.filter((id) => id !== nodeId));
+    setDSepNodeA((id) => (id === nodeId ? null : id));
+    setDSepNodeB((id) => (id === nodeId ? null : id));
+    setDSepStage("select_a");
+    setInteractionMode("default");
+    setCausalResult(null);
+    setAssignMode(null);
+  }, []);
+
   const deleteNode = useCallback(
     (nodeId: string) => {
       setNodes((nds) =>
@@ -639,25 +662,29 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
           }))
       );
       setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
-      setTreatmentId((id) => (id === nodeId ? null : id));
-      setOutcomeId((id) => (id === nodeId ? null : id));
-      setConfounderIds((ids) => ids.filter((id) => id !== nodeId));
-      setPathsResult(null);
-      setDSepResult(null);
-      setEdgeAnalysis(null);
-      setDagAnalysis(null);
-      setShowEdgePanel(false);
-      setShowAnalysisModal(false);
-      setSelectedNodeForPath(null);
-      setConditioningSet([]);
-      setDSepNodeA(null);
-      setDSepNodeB(null);
-      setDSepStage("select_a");
-      setInteractionMode("default");
-      setCausalResult(null);
-      setAssignMode(null);
+      clearNodeDependentState(nodeId);
     },
-    [setEdges, setNodes]
+    [clearNodeDependentState, setEdges, setNodes]
+  );
+
+  const handleNodesDelete = useCallback(
+    (deletedNodes: Node[]) => {
+      deletedNodes.forEach((node) => {
+        setEdges((eds) => eds.filter((edge) => edge.source !== node.id && edge.target !== node.id));
+        clearNodeDependentState(node.id);
+      });
+    },
+    [clearNodeDependentState, setEdges]
+  );
+
+  const handleEdgesDelete = useCallback(
+    (deletedEdges: Edge[]) => {
+      if (deletedEdges.length === 0) return;
+      setShowEdgePanel(false);
+      setEdgeAnalysis(null);
+      setSelectedEdgeLabel("");
+    },
+    []
   );
 
   useEffect(() => {
@@ -728,7 +755,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       id,
       type: "dagNode",
       position: { x: 300 + Math.random() * 200, y: 200 + Math.random() * 100 },
-      data: { label: newNodeLabel.trim(), isLatent: newNodeIsLatent },
+      data: { label: newNodeLabel.trim(), isLatent: newNodeIsLatent, onDelete: deleteNode },
     };
     setNodes((nds) => [...nds, newNode]);
     setNewNodeLabel("");
@@ -745,7 +772,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       id: n.id,
       type: "dagNode",
       position: n.position,
-      data: { label: n.label, isLatent: n.isLatent || false },
+      data: { label: n.label, isLatent: n.isLatent || false, onDelete: deleteNode },
     }));
     const rfEdges: Edge[] = example.edges.map((e) => {
       const handles = inferExampleEdgeHandles(exampleNodeMap.get(e.source), exampleNodeMap.get(e.target));
@@ -1356,6 +1383,8 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
+            onNodesDelete={handleNodesDelete}
+            onEdgesDelete={handleEdgesDelete}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
