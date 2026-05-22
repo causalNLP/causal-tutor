@@ -333,7 +333,7 @@ function DAGBasicsPanel({
             <BookOpen size={24} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">DAG basics</h2>
+            <h2 className="text-2xl font-bold text-slate-900">DAG Basics</h2>
             <p className="text-base text-slate-500 leading-relaxed mt-1.5">
               Use this canvas to make your causal assumptions visible before you estimate effects.
             </p>
