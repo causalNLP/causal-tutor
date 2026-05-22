@@ -11,6 +11,7 @@ import {
   useEdgesState,
   addEdge,
   MarkerType,
+  ConnectionMode,
   Panel,
   Handle,
   Position,
@@ -98,30 +99,115 @@ function DAGNode({ data, selected }: NodeProps) {
   else if (role === "Y") badgeClasses = "bg-rose-600 text-white";
   else if (role === "Z") badgeClasses = "bg-amber-500 text-white";
 
+  const handleClass =
+    "!bg-transparent !border-0 !opacity-0";
+
   return (
     <div className={classes}>
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="!w-3 !h-3 !bg-slate-400 !border-2 !border-white hover:!bg-indigo-500 transition-colors"
-      />
+      {BOUNDARY_HANDLE_STEPS.map((offset) => (
+        <Handle
+          key={`top-${offset}`}
+          id={`top-${offset}`}
+          type="source"
+          position={Position.Top}
+          className={handleClass}
+          style={{ width: "9%", height: 14, left: `${offset}%`, top: 0, transform: "translate(-50%, -50%)", borderRadius: 0 }}
+        />
+      ))}
+      {BOUNDARY_HANDLE_STEPS.map((offset) => (
+        <Handle
+          key={`right-${offset}`}
+          id={`right-${offset}`}
+          type="source"
+          position={Position.Right}
+          className={handleClass}
+          style={{ width: 14, height: "9%", right: 0, top: `${offset}%`, transform: "translate(50%, -50%)", borderRadius: 0 }}
+        />
+      ))}
+      {BOUNDARY_HANDLE_STEPS.map((offset) => (
+        <Handle
+          key={`bottom-${offset}`}
+          id={`bottom-${offset}`}
+          type="source"
+          position={Position.Bottom}
+          className={handleClass}
+          style={{ width: "9%", height: 14, left: `${offset}%`, bottom: 0, transform: "translate(-50%, 50%)", borderRadius: 0 }}
+        />
+      ))}
+      {BOUNDARY_HANDLE_STEPS.map((offset) => (
+        <Handle
+          key={`left-${offset}`}
+          id={`left-${offset}`}
+          type="source"
+          position={Position.Left}
+          className={handleClass}
+          style={{ width: 14, height: "9%", left: 0, top: `${offset}%`, transform: "translate(-50%, -50%)", borderRadius: 0 }}
+        />
+      ))}
       <span>{data.label as string}</span>
       {role && (
         <span className={`absolute -top-2 -right-2 ${badgeClasses} text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm border-2 border-white`}>
           {role}
         </span>
       )}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="!w-3 !h-3 !bg-slate-400 !border-2 !border-white hover:!bg-indigo-500 transition-colors"
-      />
     </div>
   );
 }
 
 const nodeTypes: NodeTypes = { dagNode: DAGNode };
 const DAG_BASICS_SEEN_KEY = "causal-tutor-dag-basics-seen";
+const BOUNDARY_HANDLE_STEPS = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96];
+
+type BoundarySide = "top" | "right" | "bottom" | "left";
+type ExampleNode = ExampleDAG["nodes"][number];
+
+function clampBoundaryOffset(value: number) {
+  return Math.max(BOUNDARY_HANDLE_STEPS[0], Math.min(BOUNDARY_HANDLE_STEPS[BOUNDARY_HANDLE_STEPS.length - 1], value));
+}
+
+function nearestBoundaryOffset(value: number) {
+  const clamped = clampBoundaryOffset(value);
+  return BOUNDARY_HANDLE_STEPS.reduce((best, current) =>
+    Math.abs(current - clamped) < Math.abs(best - clamped) ? current : best
+  );
+}
+
+function boundaryHandleId(side: BoundarySide, offset: number) {
+  return `${side}-${nearestBoundaryOffset(offset)}`;
+}
+
+function inferExampleEdgeHandles(sourceNode?: ExampleNode, targetNode?: ExampleNode) {
+  if (!sourceNode || !targetNode) return {};
+
+  const dx = targetNode.position.x - sourceNode.position.x;
+  const dy = targetNode.position.y - sourceNode.position.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  let sourceSide: BoundarySide;
+  let targetSide: BoundarySide;
+  let sourceOffset: number;
+  let targetOffset: number;
+
+  if (absDx >= absDy) {
+    sourceSide = dx >= 0 ? "right" : "left";
+    targetSide = dx >= 0 ? "left" : "right";
+    const verticalSkew = absDx === 0 ? 0 : dy / absDx;
+    sourceOffset = 50 + verticalSkew * 35;
+    targetOffset = 50 - verticalSkew * 35;
+  } else {
+    sourceSide = dy >= 0 ? "bottom" : "top";
+    targetSide = dy >= 0 ? "top" : "bottom";
+    const horizontalSkew = dx / absDy;
+    sourceOffset = 50 + horizontalSkew * 35;
+    targetOffset = 50 - horizontalSkew * 35;
+  }
+
+  return {
+    sourceHandle: boundaryHandleId(sourceSide, sourceOffset),
+    targetHandle: boundaryHandleId(targetSide, targetOffset),
+  };
+}
 
 function DAGBasicsPanel({
   onAddNode,
@@ -455,6 +541,8 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
         id: `e-${connection.source}-${connection.target}`,
         source: connection.source,
         target: connection.target,
+        sourceHandle: connection.sourceHandle,
+        targetHandle: connection.targetHandle,
         markerEnd: { type: MarkerType.ArrowClosed },
       };
 
@@ -497,18 +585,23 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
   // ── Load example ──
 
   const loadExample = (example: ExampleDAG) => {
+    const exampleNodeMap = new Map(example.nodes.map((n) => [n.id, n]));
     const rfNodes: Node[] = example.nodes.map((n) => ({
       id: n.id,
       type: "dagNode",
       position: n.position,
       data: { label: n.label, isLatent: n.isLatent || false },
     }));
-    const rfEdges: Edge[] = example.edges.map((e) => ({
-      id: `e-${e.source}-${e.target}`,
-      source: e.source,
-      target: e.target,
-      markerEnd: { type: MarkerType.ArrowClosed },
-    }));
+    const rfEdges: Edge[] = example.edges.map((e) => {
+      const handles = inferExampleEdgeHandles(exampleNodeMap.get(e.source), exampleNodeMap.get(e.target));
+      return {
+        id: `e-${e.source}-${e.target}`,
+        source: e.source,
+        target: e.target,
+        ...handles,
+        markerEnd: { type: MarkerType.ArrowClosed },
+      };
+    });
     setNodes(rfNodes);
     setEdges(rfEdges);
     setExampleDropdownOpen(false);
@@ -1106,6 +1199,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             nodeTypes={nodeTypes}
+            connectionMode={ConnectionMode.Loose}
             fitView
             defaultEdgeOptions={{
               markerEnd: { type: MarkerType.ArrowClosed },
