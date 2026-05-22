@@ -12,6 +12,9 @@ import {
   addEdge,
   MarkerType,
   ConnectionMode,
+  BaseEdge,
+  EdgeLabelRenderer,
+  getBezierPath,
   Panel,
   Handle,
   Position,
@@ -20,6 +23,8 @@ import {
   type Connection,
   type NodeTypes,
   type NodeProps,
+  type EdgeTypes,
+  type EdgeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -56,12 +61,13 @@ import { apiUrl } from "@/lib/api";
 
 // ── Custom Node ──────────────────────────────────────────────────────────
 
-function DAGNode({ data, selected }: NodeProps) {
+function DAGNode({ id, data, selected }: NodeProps) {
   const isLatent = data.isLatent as boolean;
   const isConditioned = data.isConditioned as boolean;
   const isHighlighted = data.isHighlighted as boolean;
   const highlightColor = data.highlightColor as string | undefined;
   const role = data.role as ("T" | "Y" | "Z" | undefined);
+  const onDelete = data.onDelete as ((nodeId: string) => void) | undefined;
 
   let classes =
     "relative px-4 py-2 shadow-sm font-medium text-sm transition-all duration-200 min-w-[80px] text-center ";
@@ -150,11 +156,85 @@ function DAGNode({ data, selected }: NodeProps) {
           {role}
         </span>
       )}
+      {selected && (
+        <button
+          type="button"
+          aria-label="Delete node"
+          title="Delete node"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onMouseDown={(event) => {
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onDelete?.(id);
+          }}
+          className="nodrag nopan absolute -top-3 -right-3 z-30 w-5 h-5 rounded-full bg-white border border-rose-200 text-rose-600 shadow-md hover:bg-rose-50 hover:border-rose-300 transition-colors flex items-center justify-center pointer-events-auto"
+        >
+          <Trash2 size={10} />
+        </button>
+      )}
     </div>
   );
 }
 
 const nodeTypes: NodeTypes = { dagNode: DAGNode };
+type DeletableEdgeData = { onDelete?: (edgeId: string) => void };
+
+function DeletableEdge({
+  id,
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+  selected,
+  data,
+}: EdgeProps) {
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  const edgeData = data as DeletableEdgeData | undefined;
+
+  return (
+    <>
+      <BaseEdge id={id} path={edgePath} markerEnd={markerEnd} style={style} />
+      {selected && (
+        <EdgeLabelRenderer>
+          <button
+            type="button"
+            aria-label="Delete edge"
+            title="Delete edge"
+            onClick={(event) => {
+              event.stopPropagation();
+              edgeData?.onDelete?.(id);
+            }}
+            className="nodrag nopan absolute w-5 h-5 rounded-full bg-white border border-rose-200 text-rose-600 shadow-md hover:bg-rose-50 hover:border-rose-300 transition-colors flex items-center justify-center"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: "all",
+            }}
+          >
+            <Trash2 size={10} />
+          </button>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  );
+}
+
+const edgeTypes: EdgeTypes = { deletable: DeletableEdge };
 const DAG_BASICS_SEEN_KEY = "causal-tutor-dag-basics-seen";
 const BOUNDARY_HANDLE_STEPS = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96];
 
@@ -347,8 +427,10 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
   const [exampleDropdownOpen, setExampleDropdownOpen] = useState(false);
   const [showBasicsPanel, setShowBasicsPanel] = useState(false);
   const [basicsDismissed, setBasicsDismissed] = useState(false);
+  const [showEdgeCreationHint, setShowEdgeCreationHint] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const addNodeInputRef = useRef<HTMLInputElement>(null);
+  const edgeHintTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Interaction modes
   const [interactionMode, setInteractionMode] = useState<"default" | "path_select" | "d_separation">("default");
@@ -385,6 +467,18 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const showTimedEdgeCreationHint = useCallback(() => {
+    setShowEdgeCreationHint(true);
+    if (edgeHintTimeoutRef.current) clearTimeout(edgeHintTimeoutRef.current);
+    edgeHintTimeoutRef.current = setTimeout(() => setShowEdgeCreationHint(false), 5500);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (edgeHintTimeoutRef.current) clearTimeout(edgeHintTimeoutRef.current);
+    };
   }, []);
 
   // ── Publish current graph as Tutor chat context ──
@@ -524,6 +618,63 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
     return map;
   }, [nodes]);
 
+  const deleteEdge = useCallback(
+    (edgeId: string) => {
+      setEdges((eds) => eds.filter((edge) => edge.id !== edgeId));
+      setShowEdgePanel(false);
+      setEdgeAnalysis(null);
+      setSelectedEdgeLabel("");
+    },
+    [setEdges]
+  );
+
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) =>
+        nds
+          .filter((node) => node.id !== nodeId)
+          .map((node) => ({
+            ...node,
+            data: { ...node.data, isHighlighted: false, highlightColor: undefined, isConditioned: false },
+          }))
+      );
+      setEdges((eds) => eds.filter((edge) => edge.source !== nodeId && edge.target !== nodeId));
+      setTreatmentId((id) => (id === nodeId ? null : id));
+      setOutcomeId((id) => (id === nodeId ? null : id));
+      setConfounderIds((ids) => ids.filter((id) => id !== nodeId));
+      setPathsResult(null);
+      setDSepResult(null);
+      setEdgeAnalysis(null);
+      setDagAnalysis(null);
+      setShowEdgePanel(false);
+      setShowAnalysisModal(false);
+      setSelectedNodeForPath(null);
+      setConditioningSet([]);
+      setDSepNodeA(null);
+      setDSepNodeB(null);
+      setDSepStage("select_a");
+      setInteractionMode("default");
+      setCausalResult(null);
+      setAssignMode(null);
+    },
+    [setEdges, setNodes]
+  );
+
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.data.onDelete === deleteNode) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            onDelete: deleteNode,
+          },
+        };
+      })
+    );
+  }, [deleteNode, setNodes]);
+
   // ── Connection handler (add edge + validate) ──
 
   const onConnect = useCallback(
@@ -539,10 +690,12 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
 
       const newEdge: Edge = {
         id: `e-${connection.source}-${connection.target}`,
+        type: "deletable",
         source: connection.source,
         target: connection.target,
         sourceHandle: connection.sourceHandle,
         targetHandle: connection.targetHandle,
+        data: { onDelete: deleteEdge },
         markerEnd: { type: MarkerType.ArrowClosed },
       };
 
@@ -562,13 +715,14 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
 
       setEdges(updatedEdges);
     },
-    [edges, nodes, setEdges, showToast]
+    [edges, nodes, setEdges, showToast, deleteEdge]
   );
 
   // ── Add node ──
 
   const handleAddNode = () => {
     if (!newNodeLabel.trim()) return;
+    const isFirstNode = nodes.length === 0;
     const id = `node_${Date.now()}`;
     const newNode: Node = {
       id,
@@ -580,6 +734,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
     setNewNodeLabel("");
     setNewNodeIsLatent(false);
     setShowAddNode(false);
+    if (isFirstNode) showTimedEdgeCreationHint();
   };
 
   // ── Load example ──
@@ -596,9 +751,11 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       const handles = inferExampleEdgeHandles(exampleNodeMap.get(e.source), exampleNodeMap.get(e.target));
       return {
         id: `e-${e.source}-${e.target}`,
+        type: "deletable",
         source: e.source,
         target: e.target,
         ...handles,
+        data: { onDelete: deleteEdge },
         markerEnd: { type: MarkerType.ArrowClosed },
       };
     });
@@ -611,6 +768,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       window.localStorage.setItem(DAG_BASICS_SEEN_KEY, "true");
     }
     clearAllAnalysis();
+    showTimedEdgeCreationHint();
     showToast(`Loaded: ${example.name}`);
   };
 
@@ -1199,6 +1357,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
             fitView
             defaultEdgeOptions={{
@@ -1234,12 +1393,24 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
                   <Share2 size={48} className="mx-auto text-slate-200 mb-4" />
                   <h2 className="text-xl font-bold text-slate-400 mb-2">Build Your Causal DAG</h2>
                   <p className="text-sm text-slate-400 max-w-sm">
-                    Add nodes using the toolbar, then draw directed edges by dragging from one handle to another. Or load an example to get started.
+                    Add nodes using the toolbar, then draw directed edges by dragging from one node boundary to another. Or load an example to get started.
                   </p>
                 </div>
               </Panel>
             )}
+
           </ReactFlow>
+
+          {showEdgeCreationHint && nodes.length > 0 && !basicsPanelVisible && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-8 z-20 flex justify-center px-4">
+              <div className="max-w-md rounded-2xl border border-indigo-100 bg-white/95 px-5 py-3 text-center shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <p className="text-sm font-semibold text-slate-900">Create edges by dragging between node boundaries</p>
+                <p className="mt-1 text-xs text-slate-500 leading-relaxed">
+                  Start on any point along a node boundary, then drag to any boundary point on another node.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Edge analysis slide-up panel */}
           {showEdgePanel && (
