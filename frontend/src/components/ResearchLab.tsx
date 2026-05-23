@@ -83,7 +83,9 @@ export default function ResearchLab({
   }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   // Load sessions + restore the previously-active session on mount.
   // Runs every time ResearchLab mounts — including after tab-switches and reloads —
@@ -136,9 +138,22 @@ export default function ResearchLab({
     }
   }, [currentSessionId, hydrated]);
 
-  // Auto-scroll to bottom
+  const isNearChatBottom = useCallback((el: HTMLDivElement) => {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+
+  const handleChatScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current = isNearChatBottom(el);
+  }, [isNearChatBottom]);
+
+  // Auto-scroll only while the user is already following the bottom of the chat.
+  // Streaming updates arrive chunk-by-chunk, so unconditional smooth scrolling
+  // fights manual scrolling and can make the scroll area appear to collapse.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (!shouldAutoScrollRef.current) return;
+    chatEndRef.current?.scrollIntoView({ behavior: loading ? "auto" : "smooth", block: "end" });
   }, [chatHistory, loading]);
 
   // Handlers
@@ -206,6 +221,7 @@ export default function ResearchLab({
   const handleSubmit = async () => {
     if ((!input && !file) || loading) return;
 
+    shouldAutoScrollRef.current = true;
     setLoading(true);
     
     // Check if this is the start of a new session
@@ -356,7 +372,7 @@ export default function ResearchLab({
   };
 
   return (
-    <div className="flex h-screen w-full bg-white text-slate-900 font-sans overflow-hidden">
+    <div className="flex h-full min-h-0 w-full bg-white text-slate-900 font-sans overflow-hidden">
 
       {/* 1. LEFT SIDEBAR — Analysis history */}
       <div
@@ -415,7 +431,7 @@ export default function ResearchLab({
       </div>
 
       {/* 2. MAIN CHAT AREA */}
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-white relative">
+      <div className="flex-1 grid grid-rows-[auto_minmax(0,1fr)_auto] h-full min-h-0 min-w-0 bg-white relative">
 
         {/* Header */}
         <header className="h-14 flex-shrink-0 flex items-center justify-between px-4 sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-transparent transition-all">
@@ -443,8 +459,12 @@ export default function ResearchLab({
         </header>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth flex flex-col w-full">
-            <div className="flex-1 w-full max-w-4xl mx-auto px-4 md:px-6 pt-6 pb-4">
+        <div
+            ref={scrollContainerRef}
+            onScroll={handleChatScroll}
+            className="min-h-0 overflow-y-auto custom-scrollbar flex flex-col w-full"
+        >
+            <div className="flex-1 min-h-0 w-full max-w-4xl mx-auto px-4 md:px-6 pt-6 pb-4">
                 
                 {chatHistory.length === 0 ? (
                     // EMPTY STATE
@@ -520,7 +540,7 @@ export default function ResearchLab({
         </div>
 
         {/* 3. INPUT AREA (Fixed Bottom) */}
-        <div className="flex-shrink-0 px-4 pb-6 pt-2 bg-white w-full">
+        <div className="min-h-0 px-4 pb-6 pt-2 bg-white w-full z-20">
             <div className="max-w-3xl mx-auto w-full relative">
                 {file && (
                     <div className="absolute -top-12 left-0 animate-in slide-in-from-bottom-2 z-10">
