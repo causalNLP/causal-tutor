@@ -146,7 +146,9 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
   // ── Mount: load from localStorage ──
   useEffect(() => {
@@ -189,10 +191,23 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
   const currentSession = sessions.find((s) => s.id === currentSessionId) || null;
   const chatHistory = currentSession?.messages || [];
 
-  // Auto-scroll on new messages
+  const isNearChatBottom = useCallback((el: HTMLDivElement) => {
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  }, []);
+
+  const handleChatScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    shouldAutoScrollRef.current = isNearChatBottom(el);
+  }, [isNearChatBottom]);
+
+  // Auto-scroll only while the user is already following the bottom of the chat.
+  // During streamed responses, unconditional smooth scrolling can fight manual
+  // scrolling and destabilize the message/input layout.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatHistory.length, loading]);
+    if (!shouldAutoScrollRef.current) return;
+    chatEndRef.current?.scrollIntoView({ behavior: loading ? "auto" : "smooth", block: "end" });
+  }, [chatHistory, loading]);
 
   // ── Mutations ──
   const updateSession = useCallback((id: string, updates: Partial<TutorChatSession>) => {
@@ -202,11 +217,13 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
   }, []);
 
   const handleNewChat = () => {
+    shouldAutoScrollRef.current = true;
     setCurrentSessionId(null);
     setHistoryOpen(false);
   };
 
   const loadSession = (id: string) => {
+    shouldAutoScrollRef.current = true;
     setCurrentSessionId(id);
     setHistoryOpen(false);
   };
@@ -223,6 +240,7 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
     const userMsg = input.trim();
     setInput("");
     setLoading(true);
+    shouldAutoScrollRef.current = true;
 
     // Ensure a session exists; create one if necessary
     let sessionId = currentSessionId;
@@ -317,7 +335,7 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
   const sortedSessions = [...sessions].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
-    <div className="w-[350px] flex-shrink-0 border-l border-slate-200 flex flex-col h-full bg-white">
+    <div className="w-[350px] flex-shrink-0 border-l border-slate-200 grid grid-rows-[auto_minmax(0,1fr)_auto] h-full min-h-0 bg-white">
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white gap-2">
         <div className="flex items-center gap-2 min-w-0">
@@ -362,7 +380,7 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
 
       {/* Body — either history list or messages */}
       {historyOpen ? (
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="min-h-0 overflow-y-auto custom-scrollbar">
           {sortedSessions.length === 0 ? (
             <div className="text-center py-12 px-4">
               <HistoryIcon size={28} className="mx-auto text-slate-300 mb-3" />
@@ -405,7 +423,11 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
           )}
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleChatScroll}
+          className="min-h-0 overflow-y-auto p-4 space-y-6"
+        >
           {chatHistory.length === 0 && (
             <div className="text-center py-12">
               <Bot size={32} className="mx-auto text-slate-300 mb-3" />
@@ -462,7 +484,7 @@ export default function TutorChatPanel(props: TutorChatPanelProps) {
 
       {/* Input — hidden in history view */}
       {!historyOpen && (
-        <div className="p-3 border-t border-slate-200 bg-white">
+        <div className="min-h-0 p-3 border-t border-slate-200 bg-white">
           <div className="relative flex items-end w-full p-1.5 bg-white border border-slate-200 rounded-xl focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-50 transition-all">
             <textarea
               value={input}
