@@ -62,6 +62,8 @@ import { apiUrl } from "@/lib/api";
 // ── Custom Node ──────────────────────────────────────────────────────────
 
 function DAGNode({ id, data, selected }: NodeProps) {
+  const label = data.label as string;
+  const hasSubscript = /[₀₁₂₃₄₅₆₇₈₉]/.test(label);
   const isLatent = data.isLatent as boolean;
   const isConditioned = data.isConditioned as boolean;
   const isHighlighted = data.isHighlighted as boolean;
@@ -150,7 +152,7 @@ function DAGNode({ id, data, selected }: NodeProps) {
           style={{ width: 14, height: "9%", left: 0, top: `${offset}%`, transform: "translate(-50%, -50%)", borderRadius: 0 }}
         />
       ))}
-      <span>{data.label as string}</span>
+      <span className={hasSubscript ? "font-mono" : ""}>{label}</span>
       {role && (
         <span className={`absolute -top-2 -right-2 ${badgeClasses} text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm border-2 border-white`}>
           {role}

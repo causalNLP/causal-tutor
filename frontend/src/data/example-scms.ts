@@ -275,7 +275,92 @@ const EXERCISE_HEALTH: SCMSchema = {
   ],
 };
 
+const MIXED_NETWORK: SCMSchema = {
+  id: "mlss-tutorial",
+  name: "MLSS Tutorial",
+  variables: [
+    {
+      id: "x1",
+      name: "X₁",
+      dependencies: [],
+      coefficients: {},
+      intercept: 0,
+      noise: { key: "n1", name: "N₁", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 0, y: 0 },
+    },
+    {
+      id: "x2",
+      name: "X₂",
+      dependencies: ["x1", "x3"],
+      coefficients: { x1: 1.0, x3: 1.0 },
+      intercept: 0,
+      noise: { key: "n2", name: "N₂", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 135, y: 165 },
+    },
+    {
+      id: "x3",
+      name: "X₃",
+      dependencies: [],
+      coefficients: {},
+      intercept: 0,
+      noise: { key: "n3", name: "N₃", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 260, y: 20 },
+    },
+    {
+      id: "x4",
+      name: "X₄",
+      dependencies: ["x2"],
+      coefficients: { x2: 1.0 },
+      intercept: 0,
+      noise: { key: "n4", name: "N₄", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 135, y: 255 },
+    },
+    {
+      id: "x5",
+      name: "X₅",
+      dependencies: ["x3", "x6"],
+      coefficients: { x3: 1.0, x6: 1.0 },
+      intercept: 0,
+      noise: { key: "n5", name: "N₅", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 255, y: 210 },
+    },
+    {
+      id: "x6",
+      name: "X₆",
+      dependencies: ["x3"],
+      coefficients: { x3: 1.0 },
+      intercept: 0,
+      noise: { key: "n6", name: "N₆", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 350, y: 105 },
+    },
+    {
+      id: "x7",
+      name: "X₇",
+      dependencies: ["x1", "x5"],
+      coefficients: { x1: 1.0, x5: 1.0 },
+      intercept: 0,
+      noise: { key: "n7", name: "N₇", distribution: { type: "normal", params: { mean: 0, std: 1 } } },
+      noise_coefficient: 1,
+      position: { x: 115, y: 370 },
+    },
+  ],
+};
+
 export const SCM_EXAMPLES: SCMExampleMeta[] = [
+  {
+    id: MIXED_NETWORK.id,
+    name: MIXED_NETWORK.name,
+    description:
+      "",
+    concept: "mixed",
+    schema: MIXED_NETWORK,
+  },
   {
     id: DEFAULT_CHAIN.id,
     name: DEFAULT_CHAIN.name,

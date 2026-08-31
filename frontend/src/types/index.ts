@@ -257,6 +257,7 @@ export interface SCMVariable {
   intercept: number;
   noise: SCMNoise;
   noise_coefficient: number;
+  position?: { x: number; y: number }; // optional manual layout
 }
 
 export interface SCMSchema {
