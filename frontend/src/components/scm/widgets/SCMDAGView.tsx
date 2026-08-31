@@ -144,105 +144,114 @@ export default function SCMDAGView({ variables, showToggle = true, intervention,
   const [showNoise, setShowNoise] = useState(false);
 
   const { computedNodes, computedEdges } = useMemo(() => {
-    const levels = computeLevels(variables);
-    const maxLevel = Math.max(0, ...Object.values(levels));
-    const rows: string[][] = Array.from({ length: maxLevel + 1 }, () => []);
-    variables.forEach((v) => rows[levels[v.id]].push(v.id));
+  const levels = computeLevels(variables);
+  const maxLevel = Math.max(0, ...Object.values(levels));
+  const rows: string[][] = Array.from({ length: maxLevel + 1 }, () => []);
+  variables.forEach((v) => {
+    if (!v.position) rows[levels[v.id]].push(v.id);
+  });
 
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-    const posById: Record<string, { x: number; y: number }> = {};
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  const posById: Record<string, { x: number; y: number }> = {};
 
-    // generates nodes
-    rows.forEach((row, levelIdx) => {
-      const rowWidth = (row.length - 1) * NODE_SPACING;
-      row.forEach((id, i) => {
-        const v = variables.find((x) => x.id === id)!;
-        const x = i * NODE_SPACING - rowWidth / 2;
-        const y = levelIdx * LEVEL_HEIGHT;
-        posById[id] = { x, y };
-        
-        const isIntervened = intervention?.target_id === v.id;
+  // seed manual positions first
+  variables.forEach((v) => {
+    if (v.position) posById[v.id] = v.position;
+  });
 
-        nodes.push({
-          id: v.id,
-          type: "varNode",
-          position: { x, y },
-          data: { 
-            label: v.name,
-            isIntervened,
-            interventionType: isIntervened ? intervention?.type : undefined,
-            interventionValue: isIntervened ? intervention?.value : undefined,
-            isQuery: queryId === v.id,
-            value: nodeValues?.[v.id],
-          },
-        });
+  // auto-layout the rest by level
+  rows.forEach((row, levelIdx) => {
+    const rowWidth = (row.length - 1) * NODE_SPACING;
+    row.forEach((id, i) => {
+      const x = i * NODE_SPACING - rowWidth / 2;
+      const y = levelIdx * LEVEL_HEIGHT;
+      posById[id] = { x, y };
+    });
+  });
+
+  // generate nodes for ALL variables, using whichever position was resolved above
+  variables.forEach((v) => {
+    const isIntervened = intervention?.target_id === v.id;
+
+    nodes.push({
+      id: v.id,
+      type: "varNode",
+      position: posById[v.id],
+      data: {
+        label: v.name,
+        isIntervened,
+        interventionType: isIntervened ? intervention?.type : undefined,
+        interventionValue: isIntervened ? intervention?.value : undefined,
+        isQuery: queryId === v.id,
+        value: nodeValues?.[v.id],
+      },
+    });
+  });
+
+  // generate edges
+  variables.forEach((v) => {
+    v.dependencies.forEach((depId) => {
+      const isMutilated = intervention?.type === "hard" && intervention?.target_id === v.id;
+
+      edges.push({
+        id: `e-${depId}-${v.id}`,
+        source: depId,
+        sourceHandle: "bottom",
+        target: v.id,
+        targetHandle: "top",
+        markerEnd: isMutilated ? undefined : { type: MarkerType.ArrowClosed },
+        style: isMutilated
+          ? { stroke: "#cbd5e1", strokeWidth: 1.5, strokeDasharray: "4 4", opacity: 0.5 }
+          : { stroke: "#94A3B8" },
+        label: isMutilated ? "✕" : undefined,
+        labelStyle: isMutilated ? { fill: "#ef4444", fontSize: 14, fontWeight: "bold" } : undefined,
+        labelBgStyle: isMutilated ? { fill: "transparent" } : undefined,
       });
     });
+  });
 
-    // generate edges
+  // generate noise nodes and edges (kept on similar row as its node for now)
+  if (showNoise) {
     variables.forEach((v) => {
-      v.dependencies.forEach((depId) => {
-        const isMutilated = intervention?.type === "hard" && intervention?.target_id === v.id;
+      const pos = posById[v.id];
+      const isLeft = pos.x <= 0;
+      const xOffset = isLeft ? -100 : 100;
+      const noisePos = { x: pos.x + xOffset, y: pos.y };
+      const noiseId = `noise-${v.id}`;
 
-        edges.push({
-          id: `e-${depId}-${v.id}`,
-          source: depId,
-          sourceHandle: "bottom",
-          target: v.id,
-          targetHandle: "top",
-          markerEnd: isMutilated ? undefined : { type: MarkerType.ArrowClosed },
-          style: isMutilated 
-            ? { stroke: "#cbd5e1", strokeWidth: 1.5, strokeDasharray: "4 4", opacity: 0.5 } 
-            : { stroke: "#94A3B8" },
-          label: isMutilated ? "✕" : undefined,
-          labelStyle: isMutilated ? { fill: "#ef4444", fontSize: 14, fontWeight: "bold" } : undefined,
-          labelBgStyle: isMutilated ? { fill: "transparent" } : undefined,
-        });
+      const isMutilated = intervention?.type === "hard" && intervention?.target_id === v.id;
+
+      nodes.push({
+        id: noiseId,
+        type: "noiseNode",
+        position: noisePos,
+        data: {
+          label: v.noise.name,
+          value: noiseValues?.[v.id],
+        },
+      });
+
+      edges.push({
+        id: `e-${noiseId}-${v.id}`,
+        source: noiseId,
+        sourceHandle: isLeft ? "right" : "left",
+        target: v.id,
+        targetHandle: isLeft ? "left" : "right",
+        type: "straight",
+        markerEnd: isMutilated ? undefined : { type: MarkerType.ArrowClosed },
+        style: isMutilated
+          ? { stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "2 4", opacity: 0.9 }
+          : { stroke: "#94A3B8", strokeDasharray: "4 3" },
+        label: isMutilated ? "✕" : undefined,
+        labelStyle: isMutilated ? { fill: "#ef4444", fontSize: 12, fontWeight: "bold" } : undefined,
+        labelBgStyle: isMutilated ? { fill: "transparent" } : undefined,
       });
     });
+  }
 
-    // generate noise nodes and edges (kept on similar row as its node for now)
-    if (showNoise) {
-      variables.forEach((v) => {
-        const pos = posById[v.id];
-        const isLeft = pos.x <= 0;
-        const xOffset = isLeft ? -100 : 100;
-        const noisePos = { x: pos.x + xOffset, y: pos.y };
-        const noiseId = `noise-${v.id}`;
-        
-        const isMutilated = intervention?.type === "hard" && intervention?.target_id === v.id;
-
-        nodes.push({
-          id: noiseId,
-          type: "noiseNode",
-          position: noisePos,
-          data: { 
-            label: v.noise.name,
-            value: noiseValues?.[v.id],
-          },
-        });
-
-        edges.push({
-          id: `e-${noiseId}-${v.id}`,
-          source: noiseId,
-          sourceHandle: isLeft ? "right" : "left",
-          target: v.id,
-          targetHandle: isLeft ? "left" : "right",
-          type: "straight", 
-          markerEnd: isMutilated ? undefined : { type: MarkerType.ArrowClosed },
-          style: isMutilated
-            ? { stroke: "#e2e8f0", strokeWidth: 1.5, strokeDasharray: "2 4", opacity: 0.9 } 
-            : { stroke: "#94A3B8", strokeDasharray: "4 3" },
-          label: isMutilated ? "✕" : undefined,
-          labelStyle: isMutilated ? { fill: "#ef4444", fontSize: 12, fontWeight: "bold" } : undefined,
-          labelBgStyle: isMutilated ? { fill: "transparent" } : undefined,
-        });
-      });
-    }
-
-    return { computedNodes: nodes, computedEdges: edges };
-  }, [variables, showNoise, intervention, queryId, nodeValues, noiseValues]);
+  return { computedNodes: nodes, computedEdges: edges };
+}, [variables, showNoise, intervention, queryId, nodeValues, noiseValues]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);

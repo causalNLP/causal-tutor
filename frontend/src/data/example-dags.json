@@ -1,5 +1,30 @@
 [
   {
+  "id": "mlss-tutorial",
+  "name": "MLSS Tutorial",
+  "description": "",
+  "concept": "mixed",
+    "nodes": [
+    { "id": "x1", "label": "X₁", "position": { "x": 150, "y": 100 } },
+    { "id": "x2", "label": "X₂", "position": { "x": 400, "y": 100 } },
+    { "id": "x3", "label": "X₃", "position": { "x": 650, "y": 100 } },
+    { "id": "x4", "label": "X₄", "position": { "x": 400, "y": 280 } },
+    { "id": "x5", "label": "X₅", "position": { "x": 650, "y": 280 } },
+    { "id": "x6", "label": "X₆", "position": { "x": 900, "y": 280 } },
+    { "id": "x7", "label": "X₇", "position": { "x": 400, "y": 460 } }
+  ],
+  "edges": [
+    { "source": "x1", "target": "x2" },
+    { "source": "x3", "target": "x2" },
+    { "source": "x2", "target": "x4" },
+    { "source": "x3", "target": "x5" },
+    { "source": "x3", "target": "x6" },
+    { "source": "x6", "target": "x5" },
+    { "source": "x5", "target": "x7" },
+    { "source": "x1", "target": "x7" }
+  ]
+  },
+  {
     "id": "smoking-lung-cancer",
     "name": "Smoking & Lung Cancer",
     "description": "Classic confounding example. Age and genetic predisposition confound the relationship between smoking and lung cancer.",
