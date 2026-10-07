@@ -277,7 +277,7 @@ const EXERCISE_HEALTH: SCMSchema = {
 
 const MIXED_NETWORK: SCMSchema = {
   id: "mlss-tutorial",
-  name: "MLSS Tutorial",
+  name: "Mixed Network",
   variables: [
     {
       id: "x1",
@@ -354,14 +354,6 @@ const MIXED_NETWORK: SCMSchema = {
 
 export const SCM_EXAMPLES: SCMExampleMeta[] = [
   {
-    id: MIXED_NETWORK.id,
-    name: MIXED_NETWORK.name,
-    description:
-      "",
-    concept: "mixed",
-    schema: MIXED_NETWORK,
-  },
-  {
     id: DEFAULT_CHAIN.id,
     name: DEFAULT_CHAIN.name,
     description: "A root variable X₁ directly causes both X₂ and X₃: a fork structure with no mediation.",
@@ -414,5 +406,13 @@ export const SCM_EXAMPLES: SCMExampleMeta[] = [
       "Exercise improves health through two separate mediating paths: lowering body weight and improving mood, which then jointly determine the health outcome.",
     concept: "diamond",
     schema: EXERCISE_HEALTH,
+  },
+    {
+    id: MIXED_NETWORK.id,
+    name: MIXED_NETWORK.name,
+    description:
+      "",
+    concept: "mixed",
+    schema: MIXED_NETWORK,
   },
 ];

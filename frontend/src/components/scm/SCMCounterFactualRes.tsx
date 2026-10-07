@@ -48,7 +48,7 @@ export default function SCMCounterfactualResult({
   const interveneVar = variables.find((v) => v.id === interveneId);
   const queryVar = variables.find((v) => v.id === queryId);
 
-  const [analysisTab, setAnalysisTab] = useState<"Distribution" | "Treatment Response" | "Computation Trace">("Distribution");
+  const [analysisTab, setAnalysisTab] = useState<"Reasoning" | "Distribution" | "Treatment Response">("Reasoning");
   const [results, setResults] = useState<Record<string, SCMVariableResult> | null>(null);
   const [intervenedResults, setIntervenedResults] = useState<Record<string, SCMVariableResult> | null>(null);
   const [loading, setLoading] = useState(false);
@@ -292,7 +292,7 @@ export default function SCMCounterfactualResult({
 
           {/* subtabs: distribution, treatment response, comp trace*/}
           <div className="flex flex-shrink-0 gap-4 border-b border-slate-100 px-4 pt-3 text-[13px] font-semibold">
-            {(["Distribution", "Treatment Response", "Computation Trace"] as const).map((tab) => (
+            {(["Reasoning", "Distribution", "Treatment Response"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setAnalysisTab(tab)}
@@ -365,7 +365,7 @@ export default function SCMCounterfactualResult({
               />
             )}
 
-            {analysisTab === "Computation Trace" && (
+            {analysisTab === "Reasoning" && (
               <ComputationTrace
                 schema={schema}
                 observedValues={observedValues}

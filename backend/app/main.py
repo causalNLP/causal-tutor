@@ -10,6 +10,7 @@ from openai import APIStatusError, AuthenticationError as OpenAIAuthError
 from pydantic import BaseModel
 
 from .curriculum_data import CURRICULUM_METHODS
+from .primer_data import PRIMER_SECTIONS
 from .dag_models import (
     CausalAnalysisRequest,
     CausalAnalysisResponse,
@@ -149,6 +150,11 @@ def read_root():
 @app.get("/curriculum-methods")
 async def get_curriculum_methods():
     return CURRICULUM_METHODS
+
+
+@app.get("/primer-sections")
+async def get_primer_sections():
+    return PRIMER_SECTIONS
 
 
 @app.get("/config/openai-key")
