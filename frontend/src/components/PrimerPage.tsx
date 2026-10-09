@@ -37,7 +37,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
-import { ArrowLeft, ChevronLeft, ChevronRight, BookOpen, Loader2, PanelRightOpen } from "lucide-react";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, BookOpen, Loader2, PanelRightOpen } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 
 // ──────────────────────────────────────────────────────────────────────
@@ -855,15 +855,19 @@ export default function PrimerPage({ onBack }: { onBack?: () => void }) {
                   <ChevronLeft size={16} /> Previous
                 </button>
                 <button
-                  onClick={goNext}
-                  disabled={activeIdx === sections.length - 1}
+                  onClick={activeIdx === sections.length - 1 ? onBack : goNext}
+                  disabled={activeIdx === sections.length - 1 && !onBack}
                   className="px-4 py-2 rounded-full text-sm font-medium text-white flex items-center gap-1.5 disabled:cursor-not-allowed transition-colors"
                   style={{
                     fontFamily: "'Inter', sans-serif",
-                    background: activeIdx === sections.length - 1 ? "#C7CBD1" : theme.accentText,
+                    background: activeIdx === sections.length - 1 && !onBack ? "#C7CBD1" : theme.accentText,
                   }}
                 >
-                  Next <ChevronRight size={16} />
+                  {activeIdx === sections.length - 1 && onBack ? (
+                    <>Finish <Check size={16} /></>
+                  ) : (
+                    <>Next <ChevronRight size={16} /></>
+                  )}
                 </button>
               </div>
             </div>
