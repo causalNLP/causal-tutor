@@ -439,9 +439,9 @@ export default function ApiKeySettings({ isOpen, onClose }: ApiKeySettingsProps)
         </div>
       )}
 
-      <p className="mt-3 text-[10px] text-slate-400 leading-relaxed">
+      {/* <p className="mt-3 text-[10px] text-slate-400 leading-relaxed">
         Your key is stored only in your browser&apos;s memory.
-      </p>
+      </p> */}
     </div>
   );
 }
