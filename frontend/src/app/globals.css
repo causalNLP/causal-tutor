@@ -48,3 +48,24 @@ body {
   font-weight: 600;
   color: #1e293b;
 }
+
+/* Primer list markers — Tailwind preflight sets list-style: none; restore here
+   so styled-jsx ordering can't silently drop them. */
+.primer-markdown ul {
+  list-style-type: disc;
+  padding-left: 1.4rem;
+  margin-bottom: 1.2rem;
+}
+.primer-markdown ol {
+  list-style-type: decimal;
+  padding-left: 1.4rem;
+  margin-bottom: 1.2rem;
+}
+.primer-markdown li {
+  display: list-item;
+  margin-bottom: 0.45rem;
+}
+.primer-markdown li::marker {
+  color: var(--accent, #3f4863);
+  font-weight: 600;
+}

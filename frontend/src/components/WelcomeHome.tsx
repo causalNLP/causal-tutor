@@ -4,10 +4,11 @@ import {
   Sparkles, ArrowRight, Lightbulb,
   BookOpen, Share2, Database, FlaskConical,
   Sprout, Target, FileSearch, BrainCircuit,
+  Network,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type FeatureMode = "curriculum" | "playground" | "sandbox" | "lab";
+type FeatureMode = "curriculum" | "playground" | "sandbox" | "lab" | "scm";
 
 interface WelcomeHomeProps {
   onNavigate: (mode: FeatureMode) => void;
@@ -23,7 +24,7 @@ interface FeatureCard {
   iconText: string;
   pillBg: string;
   pillText: string;
-  chips: [string, string];
+  chips: string[];
   cta: string;
 }
 
@@ -33,13 +34,13 @@ const FEATURES: FeatureCard[] = [
     title: "Curriculum",
     pill: "Beginner · ~3 hours",
     description:
-      "10 short lessons covering DAGs, confounders, IV, RDD, matching, and more. Each followed by an adaptive quiz.",
+      "Start with the foundations of causality, then 10 short lessons on DAGs, confounders, IV, RDD, matching, and more — each followed by an adaptive quiz.",
     icon: BookOpen,
     iconBg: "bg-emerald-50",
     iconText: "text-emerald-700",
     pillBg: "bg-emerald-50",
     pillText: "text-emerald-700",
-    chips: ["10 lessons", "Adaptive exams"],
+    chips: ["Foundations", "10 lessons", "Adaptive exams"],
     cta: "Open curriculum",
   },
   {
@@ -55,6 +56,20 @@ const FEATURES: FeatureCard[] = [
     pillText: "text-amber-700",
     chips: ["Drag & drop", "Live analyzer"],
     cta: "Open playground",
+  },
+  {
+    mode: "scm",
+    title: "SCM playground",
+    pill: "Intermediate · Hands-on",
+    description:
+      "Build structural causal models, define equations and noise, then run interventions and counterfactual queries on your own system.",
+    icon: Network,
+    iconBg: "bg-amber-50",
+    iconText: "text-amber-700",
+    pillBg: "bg-amber-50",
+    pillText: "text-amber-700",
+    chips: ["Structural equations", "do-interventions", "Counterfactuals"],
+    cta: "Open SCM playground",
   },
   {
     mode: "sandbox",
@@ -97,20 +112,27 @@ interface StartPath {
 const START_PATHS: StartPath[] = [
   {
     title: "New to causality",
-    description: "Start with the curriculum to learn the language.",
+    description: "Start with the foundations, then the curriculum, to learn the language.",
     icon: Sprout,
     iconColor: "text-emerald-700",
     mode: "curriculum",
   },
   {
     title: "Know the theory",
-    description: "Practice in the DAG playground, then run estimators.",
+    description: "Practice in the DAG playground, then run estimators on real data.",
     icon: Target,
     iconColor: "text-cyan-700",
     mode: "playground",
   },
   {
-    title: "Review a research paper or study",
+    title: "Think in mechanisms",
+    description: "Model structural equations and run interventions in the SCM playground.",
+    icon: Network,
+    iconColor: "text-violet-700",
+    mode: "scm",
+  },
+  {
+    title: "Review a paper or study",
     description: "Drop it into the Research Lab for a methodology critique.",
     icon: FileSearch,
     iconColor: "text-indigo-700",
@@ -342,10 +364,10 @@ function SharkDAG() {
       <circle className="welcome-heat-ring" cx="150" cy="50" r="42" fill="#fde68a" />
       <circle cx="150" cy="50" r="30" fill="#fff7ed" opacity="0.9" />
 
-      <path d="M 130 74 C 102 96, 82 112, 67 136" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
+      <path d="M 130 74 C 105 96, 85 112, 74 128" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
       <path
         className="welcome-flow-edge"
-        d="M 130 74 C 102 96, 82 112, 67 136"
+        d="M 130 74 C 105 96, 85 112, 74 128"
         pathLength="1"
         stroke="#f59e0b"
         strokeWidth="2.5"
@@ -353,10 +375,10 @@ function SharkDAG() {
         fill="none"
       />
 
-      <path d="M 170 74 C 198 96, 218 112, 233 136" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
+      <path d="M 170 74 C 195 96, 215 112, 226 128" stroke="#fde68a" strokeWidth="8" strokeLinecap="round" fill="none" opacity="0.42" />
       <path
         className="welcome-flow-edge welcome-edge-delay"
-        d="M 170 74 C 198 96, 218 112, 233 136"
+        d="M 170 74 C 195 96, 215 112, 226 128"
         pathLength="1"
         stroke="#f59e0b"
         strokeWidth="2.5"
@@ -365,22 +387,22 @@ function SharkDAG() {
       />
 
       <g className="welcome-moving-arrow">
-        <path d="M -10 -6 L 9 0 L -10 6 L -5 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
+        <path d="M -19 -6 L 0 0 L -19 6 L -14 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
         <animateMotion
           dur="4.8s"
           repeatCount="indefinite"
           rotate="auto"
-          path="M 130 74 C 102 96, 82 112, 67 136"
+          path="M 130 74 C 105 96, 85 112, 74 128"
         />
       </g>
       <g className="welcome-moving-arrow welcome-moving-arrow-delay">
-        <path d="M -10 -6 L 9 0 L -10 6 L -5 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
+        <path d="M -19 -6 L 0 0 L -19 6 L -14 0 Z" fill="#d97706" stroke="#fff7ed" strokeWidth="1.2" />
         <animateMotion
           begin="0.35s"
           dur="4.8s"
           repeatCount="indefinite"
           rotate="auto"
-          path="M 170 74 C 198 96, 218 112, 233 136"
+          path="M 170 74 C 195 96, 215 112, 226 128"
         />
       </g>
 
@@ -394,41 +416,48 @@ function SharkDAG() {
         fill="none"
       />
 
+      {/* Top Node */}
       <g className="welcome-warm-node" filter="url(#welcome-node-shadow)">
         <rect x="90" y="20" width="120" height="60" rx="16" fill="url(#welcome-warm-fill)" stroke="#f59e0b" strokeWidth="1.2" />
-        <circle cx="118" cy="50" r="12" fill="#fbbf24" />
-        <path d="M 118 30 L 118 36 M 118 64 L 118 70 M 98 50 L 104 50 M 132 50 L 138 50 M 104 36 L 108 40 M 128 60 L 132 64 M 104 64 L 108 60 M 128 40 L 132 36" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
-        <text x="166" y="46" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
+        <circle cx="120" cy="50" r="12" fill="#fbbf24" />
+        <path d="M 120 30 L 120 36 M 120 64 L 120 70 M 100 50 L 106 50 M 134 50 L 140 50 M 106 36 L 110 40 M 130 60 L 134 64 M 106 64 L 110 60 M 130 40 L 134 36" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+        <text x="172" y="46" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
           Warm
         </text>
-        <text x="166" y="61" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
-          weather
+        <text x="172" y="61" textAnchor="middle" fontSize="12" fontWeight="800" fill="#92400e">
+          Weather
         </text>
       </g>
 
+      {/* Ice Cream Node - Shifted 2px down and 2px left */}
       <g className="welcome-cold-node" filter="url(#welcome-node-shadow)">
         <rect x="22" y="128" width="104" height="60" rx="16" fill="url(#welcome-ice-fill)" stroke="#06b6d4" strokeWidth="1.1" />
-        <path d="M 42 146 L 56 146 L 49 171 Z" fill="#f59e0b" />
-        <path d="M 41 143 C 41 133, 57 133, 57 143 Z" fill="#f9a8d4" />
-        <circle cx="49" cy="139" r="5" fill="#fef3c7" />
-        <text x="88" y="151" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
-          Ice cream
+        <g transform="translate(45, 160)">
+          <path d="M -7 -12 L 7 -12 L 0 13 Z" fill="#f59e0b" />
+          <path d="M -8 -15 C -8 -25, 8 -25, 8 -15 Z" fill="#f9a8d4" />
+          <circle cx="0" cy="-19" r="5" fill="#fef3c7" />
+        </g>
+        <text x="87" y="153" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
+          Ice Cream
         </text>
-        <text x="88" y="166" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
-          sales
+        <text x="87" y="168" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0e7490">
+          Sales
         </text>
       </g>
 
+      {/* Shark Node - Icon scaled to 90% & pushed up 3px. Text pushed down 2px. */}
       <g className="welcome-hot-node" filter="url(#welcome-node-shadow)">
         <rect x="174" y="128" width="104" height="60" rx="16" fill="url(#welcome-shark-fill)" stroke="#fb7185" strokeWidth="1.1" />
-        <path d="M 190 160 C 198 145, 210 143, 218 160 C 208 156, 200 156, 190 160 Z" fill="#64748b" />
-        <path d="M 184 166 C 196 161, 211 161, 224 166" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" />
-        <path d="M 186 172 C 200 168, 212 168, 226 172" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.65" />
-        <text x="250" y="151" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
+        <g transform="translate(203, 155) scale(0.9)">
+          <path d="M -15 2 C -7 -13, 5 -15, 13 2 C 3 -2, -5 -2, -15 2 Z" fill="#64748b" />
+          <path d="M -21 8 C -9 3, 6 3, 19 8" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" />
+          <path d="M -19 14 C -5 10, 7 10, 21 14" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.65" />
+        </g>
+        <text x="245" y="153" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
           Shark
         </text>
-        <text x="250" y="166" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
-          attacks
+        <text x="245" y="168" textAnchor="middle" fontSize="11" fontWeight="800" fill="#be123c">
+          Attacks
         </text>
       </g>
     </svg>
@@ -519,7 +548,7 @@ function StartPathTile({ path, onNavigate }: { path: StartPath; onNavigate: (m: 
     >
       <div className="flex items-center gap-2 mb-1.5">
         <Icon size={16} className={path.iconColor} />
-        <span className="text-s font-medium text-slate-900">{path.title}</span>
+        <span className="text-sm font-medium text-slate-900">{path.title}</span>
       </div>
       <p className="text-[11px] text-slate-500 leading-relaxed">{path.description}</p>
     </button>
@@ -557,12 +586,12 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
                 onClick={() => onNavigate("curriculum")}
                 className="inline-flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-black transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
               >
-                Start with lesson 1
+                Start with the foundations of causality
                 <ArrowRight size={16} />
               </button>
             </div>
 
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 aspect-[1.2/1] flex items-center justify-center">
+            <div className="bg-slate-100 rounded-2xl p-4 aspect-[1.2/1] flex items-center justify-center">
               <SharkDAG />
             </div>
           </section>
@@ -600,7 +629,7 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
           {/* Personalized start */}
           <section className="bg-white border border-slate-200 rounded-2xl p-4 md:p-5 mb-8">
             <p className="text-lg md:text-xl font-semibold text-slate-900 mb-3">Not sure where to begin?</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2.5">
               {START_PATHS.map((path) => (
                 <StartPathTile key={path.title} path={path} onNavigate={onNavigate} />
               ))}

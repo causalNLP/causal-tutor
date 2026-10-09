@@ -8,6 +8,7 @@ import { checkAuthResponse } from "@/lib/apiErrors";
 import { apiUrl } from "@/lib/api";
 
 const MermaidChart = dynamic(() => import("./MermaidChart"), { ssr: false });
+const PrimerPage = dynamic(() => import("./PrimerPage"), { ssr: false });
 
 interface CurriculumDashboardProps {
     // Lets parent (page.tsx) know what's being studied so the unified Tutor
@@ -24,7 +25,7 @@ interface CurriculumDashboardProps {
 export default function CurriculumDashboard({ onContextChange, onChatLockedChange, compactCards = false }: CurriculumDashboardProps = {}) {
     const [methods, setMethods] = useState<any[]>([]);
     const [selectedMethod, setSelectedMethod] = useState<any | null>(null);
-    const [viewMode, setViewMode] = useState<"grid" | "theory" | "exam">("grid");
+    const [viewMode, setViewMode] = useState<"grid" | "theory" | "exam" | "primer">("grid");
     const [examQuestions, setExamQuestions] = useState<any[]>([]);
     const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
     // One slot per question; null means "not answered yet". Replaces the
@@ -96,6 +97,10 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
     const startTheory = (method: any) => {
         setSelectedMethod(method);
         setViewMode("theory");
+    };
+
+    const startPrimer = () => {
+        setViewMode("primer");
     };
 
     const startExam = async (methodId: string, methodTitle: string) => {
@@ -408,6 +413,12 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
         );
     }
 
+    if (viewMode === "primer") {
+        return (
+            <PrimerPage onBack={() => setViewMode("grid")} />
+        );
+    }
+
     return (
         <div className="h-full flex flex-col bg-slate-50 overflow-hidden">
             <header className="px-8 py-6 bg-white border-b border-slate-200 shadow-sm z-10 flex items-center justify-between gap-4">
@@ -416,7 +427,7 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
                         <BookOpen className="text-indigo-600 flex-shrink-0" size={24} />
                         <h1 className="text-2xl font-bold text-slate-900 truncate">Causality Curriculum</h1>
                     </div>
-                    <p className="text-slate-500 truncate">Master the 10 core methods of causal inference through theory and interactive exams.</p>
+                    <p className="text-slate-500 truncate">Start with the foundations, then master the 10 core methods of causal inference through theory and interactive exams.</p>
                 </div>
 
                 <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 flex-shrink-0">
@@ -442,6 +453,26 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-7xl mx-auto">
+                        {/* Primer card */}
+                        <div
+                            className="bg-gradient-to-br from-sky-50 to-indigo-50 rounded-2xl p-6 border border-sky-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all group flex flex-col h-full cursor-pointer"
+                            onClick={startPrimer}
+                        >
+                            <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 bg-sky-100 text-sky-600 shadow-inner">
+                                <GraduationCap size={20} />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-sky-700 transition-colors">Foundations</h3>
+                            <p className="text-sm text-slate-500 mb-6 leading-relaxed flex-1">
+                                New to causality? Start with a short introduction to the foundations of causality: DAGs, confounders, colliders, d-separation, Pearl's ladder, and more.
+                            </p>
+                            <div className="mt-auto pt-4 border-t border-sky-100">
+                                <div className={`${compactCards ? "py-1.5 text-xs gap-1.5" : "py-2.5 text-sm gap-2"} rounded-xl bg-sky-600 text-white font-bold flex items-center justify-center whitespace-nowrap`}>
+                                    <GraduationCap size={compactCards ? 14 : 16} />
+                                    Start Foundations
+                                </div>
+                            </div>
+                        </div>
+
                         {methods.map((method) => (
                             <div 
                                 key={method.id}

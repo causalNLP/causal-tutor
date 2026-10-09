@@ -38,7 +38,6 @@ type Rect = {
   centerY: number;
 };
 
-// measure distances to map arrow locations 
 function measure(el: HTMLElement, container: HTMLElement): Rect {
   const a = el.getBoundingClientRect();
   const c = container.getBoundingClientRect();
@@ -107,11 +106,11 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
   }, [recompute, schemaKey]);
 
   return (
-    <div className="w-full pb-4">
+    <div className="w-full pb-3">
       <div className="w-full overflow-x-auto [scrollbar-width:thin] sticky bottom-0">
-        <div ref={containerRef} className="relative mx-auto w-fit min-w-max px-12 pt-12 pb-2">
+        <div ref={containerRef} className="relative mx-auto w-fit min-w-max px-9 pt-9 pb-[7px]">
         {rects && (() => {
-          const busY = Math.max(rects.data.bottom, rects.assume.bottom, rects.query.bottom) + 24;
+          const busY = Math.max(rects.data.bottom, rects.assume.bottom, rects.query.bottom) + 20;
           
           const scmToDagY = rects.dag.centerY;
           const scmToDagMidX = (rects.scm.right + rects.dag.left) / 2;
@@ -119,17 +118,17 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
           return (
             <svg className="pointer-events-none absolute inset-0 z-0 h-full w-full overflow-visible">
               <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
                   <path d="M 0 0 L 10 5 L 0 10 z" fill="#94A3B8" />
                 </marker>
               </defs>
 
               {/* SCM -> DAG */}
-              <path d={`M ${rects.scm.right} ${scmToDagY} L ${rects.dag.left - 2} ${scmToDagY}`} fill="none" stroke="#94A3B8" strokeWidth={1.5} markerEnd="url(#arrow)" />
+              <path d={`M ${rects.scm.right} ${scmToDagY} L ${rects.dag.left - 2} ${scmToDagY}`} fill="none" stroke="#94A3B8" strokeWidth={1} markerEnd="url(#arrow)" />
               
-              <rect x={scmToDagMidX - 45} y={scmToDagY - 22} width="90" height="30" fill="#ffffff" />
-              <text x={scmToDagMidX} y={scmToDagY - 6} textAnchor="middle" fill="#64748B" fontSize="12" fontWeight={500}>structural</text>
-              <text x={scmToDagMidX} y={scmToDagY + 8} textAnchor="middle" fill="#64748B" fontSize="12" fontWeight={500}>constraints</text>
+              <rect x={scmToDagMidX - 38} y={scmToDagY - 18} width="76" height="25" fill="#ffffff" />
+              <text x={scmToDagMidX} y={scmToDagY - 4} textAnchor="middle" fill="#64748B" fontSize="9" fontWeight={500}>structural</text>
+              <text x={scmToDagMidX} y={scmToDagY + 7} textAnchor="middle" fill="#64748B" fontSize="9" fontWeight={500}>constraints</text>
 
               {/* SCM -> Hierarchy Layers */}
               {(() => {
@@ -137,45 +136,45 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
                 const branchY = rects.scm.bottom + (rects.obs.top - rects.scm.bottom) / 2;
                 return (
                   <>
-                    <path d={`M ${trunkX} ${rects.scm.bottom} L ${trunkX} ${branchY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
-                    <path d={`M ${rects.obs.centerX} ${branchY} L ${rects.cf.centerX} ${branchY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
-                    <path d={`M ${rects.obs.centerX} ${branchY} L ${rects.obs.centerX} ${rects.obs.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
-                    <path d={`M ${rects.int.centerX} ${branchY} L ${rects.int.centerX} ${rects.int.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
-                    <path d={`M ${rects.cf.centerX} ${branchY} L ${rects.cf.centerX} ${rects.cf.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
+                    <path d={`M ${trunkX} ${rects.scm.bottom} L ${trunkX} ${branchY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
+                    <path d={`M ${rects.obs.centerX} ${branchY} L ${rects.cf.centerX} ${branchY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
+                    <path d={`M ${rects.obs.centerX} ${branchY} L ${rects.obs.centerX} ${rects.obs.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
+                    <path d={`M ${rects.int.centerX} ${branchY} L ${rects.int.centerX} ${rects.int.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
+                    <path d={`M ${rects.cf.centerX} ${branchY} L ${rects.cf.centerX} ${rects.cf.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
                   </>
                 );
               })()}
 
               {/* Hierarchy -> Inputs */}
-              <path d={`M ${rects.data.centerX} ${rects.obs.bottom} L ${rects.data.centerX} ${rects.data.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
+              <path d={`M ${rects.data.centerX} ${rects.obs.bottom} L ${rects.data.centerX} ${rects.data.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
 
               {/* Inputs -> Results */}
-              <path d={`M ${rects.data.centerX} ${rects.data.bottom} L ${rects.data.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
-              <path d={`M ${rects.assume.centerX} ${rects.assume.bottom} L ${rects.assume.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
-              <path d={`M ${rects.query.centerX} ${rects.query.bottom} L ${rects.query.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
+              <path d={`M ${rects.data.centerX} ${rects.data.bottom} L ${rects.data.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
+              <path d={`M ${rects.assume.centerX} ${rects.assume.bottom} L ${rects.assume.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
+              <path d={`M ${rects.query.centerX} ${rects.query.bottom} L ${rects.query.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
 
               {/* Bus for arrows */}
-              <path d={`M ${rects.data.centerX} ${busY} L ${rects.query.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} />
+              <path d={`M ${rects.data.centerX} ${busY} L ${rects.query.centerX} ${busY}`} fill="none" stroke="#CBD5E1" strokeWidth={1} />
 
               {/* drop into results*/}
-              <path d={`M ${rects.results.left + rects.results.width * 0.25} ${busY} L ${rects.results.left + rects.results.width * 0.25} ${rects.results.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
-              <path d={`M ${rects.results.centerX} ${busY} L ${rects.results.centerX} ${rects.results.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
-              <path d={`M ${rects.results.right - rects.results.width * 0.25} ${busY} L ${rects.results.right - rects.results.width * 0.25} ${rects.results.top - 6}`} fill="none" stroke="#CBD5E1" strokeWidth={1.5} markerEnd="url(#arrow)" />
+              <path d={`M ${rects.results.left + rects.results.width * 0.25} ${busY} L ${rects.results.left + rects.results.width * 0.25} ${rects.results.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
+              <path d={`M ${rects.results.centerX} ${busY} L ${rects.results.centerX} ${rects.results.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
+              <path d={`M ${rects.results.right - rects.results.width * 0.25} ${busY} L ${rects.results.right - rects.results.width * 0.25} ${rects.results.top - 5}`} fill="none" stroke="#CBD5E1" strokeWidth={1} markerEnd="url(#arrow)" />
 
               {/* Query <-> DAG / Counterfactual */}
-              <path d={`M ${rects.query.centerX} ${rects.query.top} L ${rects.query.centerX} ${rects.dag.bottom}`} fill="none" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="5 5" markerEnd="url(#arrow)" />
-              <path d={`M ${rects.query.centerX} ${rects.cf.centerY} L ${rects.cf.right + 6} ${rects.cf.centerY}`} fill="none" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="5 5" markerEnd="url(#arrow)" />
+              <path d={`M ${rects.query.centerX} ${rects.query.top} L ${rects.query.centerX} ${rects.dag.bottom}`} fill="none" stroke="#94A3B8" strokeWidth={1} strokeDasharray="4 3" markerEnd="url(#arrow)" />
+              <path d={`M ${rects.query.centerX} ${rects.cf.centerY} L ${rects.cf.right + 5} ${rects.cf.centerY}`} fill="none" stroke="#94A3B8" strokeWidth={1} strokeDasharray="4 3" markerEnd="url(#arrow)" />
             </svg>
           );
         })()}
 
         {/* Legend Nodes */}
-        <div className="relative z-10 flex flex-col gap-16 w-full">
-          <div className="absolute -left-10 top-10 flex flex-col gap-6">
-            <div className="flex h-[45px] w-[110px] items-center justify-center rounded-xl border-[1.5px] border-dashed border-[#8BA3D1] bg-[#F1F5FB] text-[14px] font-semibold text-[#4F70B0]">
+        <div className="relative z-10 flex flex-col gap-[52px] w-full">
+          <div className="absolute -left-8 top-8 flex flex-col gap-5">
+            <div className="flex h-[37px] w-[90px] items-center justify-center rounded-lg border border-dashed border-[#8BA3D1] bg-[#F1F5FB] text-[11px] font-semibold text-[#4F70B0]">
               Unobserved
             </div>
-            <div className="flex h-[55px] w-[110px] flex-col items-center justify-center rounded-xl border-[1.5px] border-dashed border-[#D9C4A9] bg-[#FCF8F2] text-center text-[14px] font-semibold leading-snug text-[#B89467]">
+            <div className="flex h-[46px] w-[90px] flex-col items-center justify-center rounded-lg border border-dashed border-[#D9C4A9] bg-[#FCF8F2] text-center text-[11px] font-semibold leading-snug text-[#B89467]">
               Potentially
               <br />
               Known
@@ -183,35 +182,35 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
           </div>
 
           {/*SCM + DAG */}
-          <div className="flex w-full items-start justify-between pl-[140px] pr-[20px] gap-32">
-            <Hoverable ref={scmRef} title="Structural Causal Model" description={HOVERABLE_DESCRIPTIONS.scm} side="bottom" className="w-fit min-w-[500px] flex-shrink-0">
-              <h2 className="mb-4 text-lg font-bold tracking-tight text-[#4F70B0]">Structural Causal Model</h2>
-              <div className="relative w-full rounded-xl border-[1.5px] border-dashed border-[#8BA3D1] bg-[#F2F6FE] py-4 shadow-sm">
-                <div className="mb-6 flex items-center justify-between px-6">
-                  <div className="flex items-center gap-3">
-                    <span className="relative flex h-3 w-3">
+          <div className="flex w-full items-start justify-between pl-[115px] pr-[33px] gap-[140px]">
+            <Hoverable ref={scmRef} title="Structural Causal Model" description={HOVERABLE_DESCRIPTIONS.scm} side="bottom" className="w-fit min-w-[410px] flex-shrink-0">
+              <h2 className="mb-3 text-[15px] font-bold tracking-tight text-[#4F70B0]">Structural Causal Model</h2>
+              <div className="relative w-full rounded-xl border-[1.5px] border-dashed border-[#8BA3D1] bg-[#F2F6FE] py-3 shadow-sm">
+                <div className="mb-5 flex items-center justify-between px-5">
+                  <div className="flex items-center gap-2.5">
+                    <span className="relative flex h-2.5 w-2.5">
                       <span className="absolute inline-flex h-full w-full animate-ping [animation-duration:2s] rounded-full bg-emerald-400 opacity-75" />
-                      <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                     </span>
-                    <span className="text-[17px] font-semibold text-[#374E74]">Active Variables</span>
+                    <span className="text-[13px] font-semibold text-[#374E74]">Active Variables</span>
                   </div>
-                  <span className="font-serif text-xl font-bold italic text-[#4F70B0]">
-                    P<sub className="ml-[1px] text-sm font-bold">
-                      <sub className="ml-[1px] text-sm font-bold">
+                  <span className="font-serif text-lg font-bold italic text-[#4F70B0]">
+                    P<sub className="ml-[1px] text-[12px] font-bold">
+                      <sub className="ml-[1px] text-[12px] font-bold">
                       {variables.map((_, i) => `N${toSubscript(i + 1)}`).join(",")}
                     </sub>
                     </sub>
                   </span>
                 </div>
                 
-                <div className="w-full overflow-x-auto pb-2 px-6 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#8BA3D1]/50">
-                  <div className="grid grid-cols-[max-content_auto_1fr] min-w-max items-center gap-x-6 gap-y-4 font-mono">
+                <div className="w-full overflow-x-auto pb-2 px-5 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#8BA3D1]/50">
+                  <div className="grid grid-cols-[max-content_auto_1fr] min-w-max items-center gap-x-5 gap-y-3.5 font-mono">
                     {variables.map((v, i) => (
                       <React.Fragment key={v.id}>
-                        <div className="flex items-center gap-4 pl-2">
-                          <span className="text-[16px] font-bold text-[#395A96]">{v.name}</span>
-                          <span className="text-[16px] text-[#94A3B8]">←</span>
-                          <span className="text-[16px] text-[#395A96]">{formatFunctionalForm(v, i, { variables } as SCMSchema)}</span>
+                        <div className="flex items-center gap-3.5 pl-2">
+                          <span className="text-[12px] font-bold text-[#395A96]">{v.name}</span>
+                          <span className="text-[12px] text-[#94A3B8]">←</span>
+                          <span className="text-[12px] text-[#395A96]">{formatFunctionalForm(v, i, { variables } as SCMSchema)}</span>
                         </div>
                         {i === 0 && (
                           <div
@@ -219,8 +218,8 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
                             style={{ gridRow: `span ${variables.length}` }}
                           />
                         )}
-                        <div className="flex items-center justify-self-end rounded-lg border border-[#CBD5E1] bg-white px-4 py-1.5 text-[14px] text-[#64748B] shadow-sm">
-                          <span className="mr-2 font-semibold text-[#94A3B8]">{v.noise.name} ~</span>
+                        <div className="flex items-center justify-self-end rounded-lg border border-[#CBD5E1] bg-white px-3.5 py-1 text-[11px] text-[#64748B] shadow-sm">
+                          <span className="mr-1.5 font-semibold text-[#94A3B8]">{v.noise.name} ~</span>
                           {formatDistribution(v.noise.distribution)}
                         </div>
                       </React.Fragment>
@@ -230,60 +229,60 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
               </div>
             </Hoverable>
 
-            <Hoverable ref={dagRef} title="DAG" description={HOVERABLE_DESCRIPTIONS.dag} side="bottom" className="w-[300px] flex-shrink-0">
-                <h2 className="mb-4 text-lg font-bold tracking-tight text-[#C48A5E]">DAG</h2>
-                <div className="h-[280px] w-full rounded-xl border-[1.5px] border-dashed border-[#D9C4A9] bg-white shadow-sm overflow-hidden">
+            <Hoverable ref={dagRef} title="DAG" description={HOVERABLE_DESCRIPTIONS.dag} side="bottom" className="w-[285px] flex-shrink-0">
+                <h2 className="mb-3 text-[15px] font-bold tracking-tight text-[#C48A5E]">DAG</h2>
+                <div className="h-[230px] w-full rounded-xl border-[1.5px] border-dashed border-[#D9C4A9] bg-white shadow-sm overflow-hidden">
                   <SCMDAGView key={schemaKey} variables={variables} showToggle={false} />
                 </div>
               </Hoverable>
           </div>
 
           {/* hierarchy */}
-          <div className="w-full flex justify-center">
+          <div className="w-full flex justify-start pl-[115px]">
             <div className="w-fit rounded-xl border-[1.5px] border-dotted border-[#94A3B8] bg-white p-1.5">
-              <div className="flex items-stretch gap-3">
-                <Hoverable ref={obsRef} title="Observational" description={HOVERABLE_DESCRIPTIONS.obs} className="w-[220px] flex-shrink-0">
-                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-[1.5px] border-dashed border-[#D9C4A9] bg-[#FCF8F2] py-5 shadow-sm">
-                    <div className="flex items-center gap-2 text-[15px] font-bold text-[#B89467]">
-                      <BarChart2 size={18} />
+              <div className="flex items-stretch gap-2.5">
+                <Hoverable ref={obsRef} title="Observational" description={HOVERABLE_DESCRIPTIONS.obs} className="w-[180px] flex-shrink-0">
+                  <div className="flex h-full flex-col items-center justify-center gap-2.5 rounded-lg border-[1.5px] border-dashed border-[#D9C4A9] bg-[#FCF8F2] py-4 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#B89467]">
+                      <BarChart2 size={14} />
                       Observational
                     </div>
-                    <div className="font-serif text-[20px] font-medium italic tracking-wide text-[#A37B4E]">
-                      ℒ<sub className="text-[12px]">1</sub> : P<sub className="ml-0.5 text-[12px] font-bold">X</sub>
+                    <div className="font-serif text-[16px] font-medium italic tracking-wide text-[#A37B4E]">
+                      ℒ<sub className="text-[9px]">1</sub> : P<sub className="ml-0.5 text-[9px] font-bold">X</sub>
                     </div>
                   </div>
                 </Hoverable>
 
-                <Hoverable ref={intRef} title="Interventional" description={HOVERABLE_DESCRIPTIONS.int} className="w-[220px] flex-shrink-0">
-                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-[1.5px] border-dashed border-[#D9C4A9] bg-[#FCF8F2] py-5 shadow-sm">
-                    <div className="flex items-center gap-2 text-[15px] font-bold text-[#B89467]">
-                      <Target size={18} />
+                <Hoverable ref={intRef} title="Interventional" description={HOVERABLE_DESCRIPTIONS.int} className="w-[180px] flex-shrink-0">
+                  <div className="flex h-full flex-col items-center justify-center gap-2.5 rounded-lg border-[1.5px] border-dashed border-[#D9C4A9] bg-[#FCF8F2] py-4 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#B89467]">
+                      <Target size={14} />
                       Interventional
                     </div>
-                    <div className="font-serif text-[20px] font-medium italic tracking-wide text-[#A37B4E]">
-                      ℒ<sub className="text-[12px]">2</sub> : P
-                      <sub className="ml-0.5 text-[12px]">
+                    <div className="font-serif text-[16px] font-medium italic tracking-wide text-[#A37B4E]">
+                      ℒ<sub className="text-[9px]">2</sub> : P
+                      <sub className="ml-0.5 text-[9px]">
                         do(<span className="font-bold">X'</span>=x')
                       </sub>
                     </div>
                   </div>
                 </Hoverable>
 
-                <Hoverable ref={cfRef} title="Counterfactual" description={HOVERABLE_DESCRIPTIONS.cf} className="w-[220px] flex-shrink-0">
-                  <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border-[1.5px] border-dashed border-[#8BA3D1] bg-[#F2F6FE] py-5 shadow-sm">
-                    <div className="flex items-center gap-2 text-[15px] font-bold text-[#4F70B0]">
-                      <Rewind size={18} />
+                <Hoverable ref={cfRef} title="Counterfactual" description={HOVERABLE_DESCRIPTIONS.cf} className="w-[180px] flex-shrink-0">
+                  <div className="flex h-full flex-col items-center justify-center gap-2.5 rounded-lg border-[1.5px] border-dashed border-[#8BA3D1] bg-[#F2F6FE] py-4 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#4F70B0]">
+                      <Rewind size={14} />
                       Counterfactual
                     </div>
-                    <div className="flex items-center text-[20px] font-medium tracking-wide text-[#4F70B0]">
+                    <div className="flex items-center text-[16px] font-medium tracking-wide text-[#4F70B0]">
                       <span className="font-serif italic">
-                        ℒ<sub className="text-[12px]">3</sub> : P
+                        ℒ<sub className="text-[9px]">3</sub> : P
                       </span>
-                      <div className="-ml-0.5 -mt-1.5 flex flex-col items-center justify-center">
-                        <span className="font-serif text-[10px] italic leading-[12px]">
+                      <div className="-ml-0.5 -mt-1 flex flex-col items-center justify-center">
+                        <span className="font-serif text-[8px] italic leading-[10px]">
                           <span className="font-bold">X'</span>=x'
                         </span>
-                        <sub className="font-serif text-[11px] italic leading-[12px]">
+                        <sub className="font-serif text-[9px] italic leading-[10px]">
                           do(<span className="font-bold">X''</span>=x'')
                         </sub>
                       </div>
@@ -295,26 +294,26 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
           </div>
 
           {/* data/assumptions/query -> results nodes */}
-          <div className="flex w-full min-w-max items-start justify-between pl-[140px]">
-            <div className="flex flex-1 justify-around pr-[40px]">
+          <div className="flex w-full min-w-max items-start justify-between pl-[115px] pr-[33px]">
+            <div className="flex flex-1 justify-around pr-[33px]">
               <div className="flex justify-center">
                 <Hoverable ref={dataRef} title="Data" description={HOVERABLE_DESCRIPTIONS.data}>
-                  <div className="flex h-[52px] w-[140px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[16px] font-bold text-[#475569] shadow-sm">
+                  <div className="flex h-[42px] w-[115px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[12px] font-bold text-[#475569] shadow-sm">
                     Data
                   </div>
                 </Hoverable>
               </div>
               <div className="flex justify-center">
                 <Hoverable ref={assumeRef} title="Assumptions" description={HOVERABLE_DESCRIPTIONS.assume}>
-                  <div className="flex h-[52px] w-[140px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[16px] font-bold text-[#475569] shadow-sm">
+                  <div className="flex h-[42px] w-[115px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[12px] font-bold text-[#475569] shadow-sm">
                     Assumptions
                   </div>
                 </Hoverable>
               </div>
             </div>
-            <div className="flex w-[280px] justify-center">
+            <div className="flex w-[230px] justify-center">
               <Hoverable ref={queryRef} title="Query" description={HOVERABLE_DESCRIPTIONS.query}>
-                <div className="flex h-[52px] w-[140px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[16px] font-bold text-[#475569] shadow-sm">
+                <div className="flex h-[42px] w-[115px] items-center justify-center rounded-xl border border-[#CBD5E1] bg-white text-[12px] font-bold text-[#475569] shadow-sm">
                   Query
                 </div>
               </Hoverable>
@@ -322,16 +321,16 @@ export default function SCMOverview({ variables }: SCMOverviewProps) {
           </div>
 
           {/* Row 4: Results */}
-          <div className="flex w-full justify-center pl-[150px] pr-[300px]">
+          <div className="flex w-full justify-center pl-[123px] pr-[285px]">
             <Hoverable ref={resultsRef} title="Results" description={HOVERABLE_DESCRIPTIONS.results} side="top">
-              <div className="flex h-[45px] w-[180px] items-center justify-center rounded-xl border border-[#8ad182] bg-[#E9FBEB] text-[16px] font-bold text-[#638863] shadow-sm">
+              <div className="flex h-[37px] w-[148px] items-center justify-center rounded-xl border border-[#8ad182] bg-[#E9FBEB] text-[12px] font-bold text-[#638863] shadow-sm">
                 Results
               </div>
             </Hoverable>
           </div>
         </div>
+        </div>
       </div>
     </div>
-  </div>
   );
 }
