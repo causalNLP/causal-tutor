@@ -1,3 +1,4 @@
+import base64
 import os
 from typing import Dict, List, Optional, Union
 
@@ -300,15 +301,21 @@ async def analyze_endpoint(
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="File must be a PDF")
     try:
-        text = await extract_text_from_pdf(file)
+        pdf_base64 = base64.b64encode(await file.read()).decode("ascii")
         analysis = await analyze_paper(
-            text,
+            "",
             file.filename,
             provider=llm.provider,
             model=llm.model,
             api_key=llm.api_key,
+            pdf_base64=pdf_base64,
         )
-        return APIAnalysisResponse(analysis=analysis, full_text=text)
+        return APIAnalysisResponse(
+            analysis=analysis,
+            full_text="",
+            pdf_base64=pdf_base64,
+            pdf_filename=file.filename,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -348,7 +355,9 @@ async def analyze_scenario_endpoint(
 class ChatInput(BaseModel):
     message: str
     history: List[dict]
-    paper_text: str
+    paper_text: str = ""
+    pdf_base64: Optional[str] = None
+    pdf_filename: Optional[str] = None
     analysis_context: Optional[str] = None
 
 
@@ -366,6 +375,8 @@ async def chat_endpoint(
             model=llm.model,
             provider=llm.provider,
             api_key=llm.api_key,
+            pdf_base64=request.pdf_base64,
+            pdf_filename=request.pdf_filename,
         )
     except HTTPException:
         raise

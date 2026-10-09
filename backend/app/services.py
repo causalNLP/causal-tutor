@@ -148,12 +148,24 @@ CITATION RULES:
 Return the output in the specified JSON structure.
 """
 
+def _pdf_file_part(pdf_base64: str, filename: str) -> dict:
+    """Chat-completions file content part; supported by OpenAI and OpenRouter."""
+    return {
+        "type": "file",
+        "file": {
+            "filename": filename,
+            "file_data": f"data:application/pdf;base64,{pdf_base64}",
+        },
+    }
+
+
 async def analyze_paper(
     text: str,
     filename: str,
     provider: LLMProvider = "openai",
     model: Optional[str] = None,
     api_key: Optional[str] = None,
+    pdf_base64: Optional[str] = None,
 ) -> CausalQueryResponse:
     tools = [
         {
@@ -166,11 +178,19 @@ async def analyze_paper(
         }
     ]
 
+    if pdf_base64:
+        user_content = [
+            {"type": "text", "text": f"Analyze the attached paper: {filename}"},
+            _pdf_file_part(pdf_base64, filename),
+        ]
+    else:
+        user_content = f"Analyze the following text/paper: {filename}\n\n{text[:100000]}"
+
     completion = await _get_client(provider, api_key).chat.completions.create(
         model=resolve_model(provider, model, fallback_openai_model="gpt-4o"),
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"Analyze the following text/paper: {filename}\n\n{text[:100000]}"}
+            {"role": "user", "content": user_content}
         ],
         tools=tools,
         tool_choice={"type": "function", "function": {"name": "provide_causal_analysis"}}
@@ -186,7 +206,14 @@ async def chat_with_paper(
     model: Optional[str] = None,
     provider: LLMProvider = "openai",
     api_key: Optional[str] = None,
+    pdf_base64: Optional[str] = None,
+    pdf_filename: Optional[str] = None,
 ):
+    reference_block = (
+        "The research paper is attached as a PDF in the first user message."
+        if pdf_base64
+        else f"Reference Context:\n{paper_text[:50000]}..."
+    )
     system_prompt_content = f"""You are a helpful and Socratic Causal Tutor. Your goal is to help students understand the causal inference methods used in the provided research paper or scenario.
 
 Current Analysis Context:
@@ -194,8 +221,7 @@ Current Analysis Context:
 
 ---
 
-Reference Context:
-{paper_text[:50000]}...
+{reference_block}
 
 ---
 
@@ -209,8 +235,17 @@ Instructions for Tutor:
     
     formatted_messages = [
         {"role": "system", "content": system_prompt_content}
-    ] 
-    
+    ]
+
+    if pdf_base64:
+        formatted_messages.append({
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Here is the research paper we will discuss."},
+                _pdf_file_part(pdf_base64, pdf_filename or "paper.pdf"),
+            ],
+        })
+
     for m in messages:
         if m["role"] in ["user", "assistant"]:
             formatted_messages.append({"role": m["role"], "content": m["content"]})

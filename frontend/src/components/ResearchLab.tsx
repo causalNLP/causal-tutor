@@ -322,6 +322,8 @@ export default function ResearchLab({
               message: userMsg,
               history: chatHistory.map(m => ({ role: m.role, content: m.content })), // Send raw content
               paper_text: analysis.full_text,
+              pdf_base64: analysis.pdf_base64,
+              pdf_filename: analysis.pdf_filename,
               analysis_context: analysisContext
             }),
         });

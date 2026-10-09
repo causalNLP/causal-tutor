@@ -31,6 +31,8 @@ export interface CausalQueryResponse {
 export interface APIAnalysisResponse {
     analysis: CausalQueryResponse;
     full_text: string;
+    pdf_base64?: string | null;
+    pdf_filename?: string | null;
 }
 
 // ── DAG Playground Types ─────────────────────────────────────────────────

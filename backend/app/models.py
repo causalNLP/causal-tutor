@@ -51,6 +51,10 @@ class ExamResponse(BaseModel):
 class APIAnalysisResponse(BaseModel):
     analysis: CausalQueryResponse
     full_text: str
+    # Set for PDF uploads: the original file, so follow-up chat turns can pass it
+    # straight to the LLM instead of re-using extracted text.
+    pdf_base64: Optional[str] = None
+    pdf_filename: Optional[str] = None
 
 class AnalyzeTextRequest(BaseModel):
     text: str
