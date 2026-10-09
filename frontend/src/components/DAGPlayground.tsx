@@ -70,6 +70,19 @@ function DAGNode({ id, data, selected }: NodeProps) {
   const highlightColor = data.highlightColor as string | undefined;
   const role = data.role as ("T" | "Y" | "Z" | undefined);
   const onDelete = data.onDelete as ((nodeId: string) => void) | undefined;
+  const onRename = data.onRename as ((nodeId: string, label: string) => void) | undefined;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(label);
+
+  const startEditing = () => {
+    setDraft(label);
+    setEditing(true);
+  };
+  const commitEdit = () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== label) onRename?.(id, next);
+  };
 
   let classes =
     "relative px-4 py-2 shadow-sm font-medium text-sm transition-all duration-200 min-w-[80px] text-center ";
@@ -111,7 +124,7 @@ function DAGNode({ id, data, selected }: NodeProps) {
     "!bg-transparent !border-0 !opacity-0";
 
   return (
-    <div className={classes}>
+    <div className={classes} onDoubleClick={startEditing} title={editing ? undefined : "Double-click to rename"}>
       {BOUNDARY_HANDLE_STEPS.map((offset) => (
         <Handle
           key={`top-${offset}`}
@@ -152,7 +165,27 @@ function DAGNode({ id, data, selected }: NodeProps) {
           style={{ width: 14, height: "9%", left: 0, top: `${offset}%`, transform: "translate(-50%, -50%)", borderRadius: 0 }}
         />
       ))}
-      <span className={hasSubscript ? "font-mono" : ""}>{label}</span>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          maxLength={40}
+          aria-label="Node name"
+          onChange={(event) => setDraft(event.target.value)}
+          onFocus={(event) => event.target.select()}
+          onBlur={commitEdit}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (event.key === "Enter") commitEdit();
+            else if (event.key === "Escape") setEditing(false);
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          className="nodrag nopan relative z-20 w-full min-w-[60px] bg-transparent text-center text-sm font-medium outline-none border-b border-indigo-400"
+          style={{ width: `${Math.max(draft.length, 6)}ch` }}
+        />
+      ) : (
+        <span className={hasSubscript ? "font-mono" : ""}>{label}</span>
+      )}
       {role && (
         <span className={`absolute -top-2 -right-2 ${badgeClasses} text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm border-2 border-white`}>
           {role}
@@ -811,20 +844,43 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
     []
   );
 
+  // Read labels through a ref so renameNode stays referentially stable; a changing
+  // identity would re-run the effect below, which calls setNodes, in an endless loop.
+  const nodeLabelsRef = useRef(nodeLabels);
+  nodeLabelsRef.current = nodeLabels;
+
+  const renameNode = useCallback(
+    (nodeId: string, label: string) => {
+      setNodes((nds) =>
+        nds.map((node) => (node.id === nodeId ? { ...node, data: { ...node.data, label } } : node))
+      );
+      // Edge-analysis header caches the old names; refresh it for the affected edge.
+      setActiveEdgeQuery((query) => {
+        if (query && (query.source === nodeId || query.target === nodeId)) {
+          const nameOf = (id: string) => (id === nodeId ? label : nodeLabelsRef.current[id] || id);
+          setSelectedEdgeLabel(`${nameOf(query.source)} → ${nameOf(query.target)}`);
+        }
+        return query;
+      });
+    },
+    [setNodes]
+  );
+
   useEffect(() => {
     setNodes((nds) =>
       nds.map((node) => {
-        if (node.data.onDelete === deleteNode) return node;
+        if (node.data.onDelete === deleteNode && node.data.onRename === renameNode) return node;
         return {
           ...node,
           data: {
             ...node.data,
             onDelete: deleteNode,
+            onRename: renameNode,
           },
         };
       })
     );
-  }, [deleteNode, setNodes]);
+  }, [deleteNode, renameNode, setNodes]);
 
   // ── Connection handler (add edge + validate) ──
 
@@ -884,7 +940,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       id,
       type: "dagNode",
       position: { x: 300 + Math.random() * 200, y: 200 + Math.random() * 100 },
-      data: { label: newNodeLabel.trim(), isLatent: newNodeIsLatent, onDelete: deleteNode },
+      data: { label: newNodeLabel.trim(), isLatent: newNodeIsLatent, onDelete: deleteNode, onRename: renameNode },
     };
     setNodes((nds) => [...nds, newNode]);
     setNewNodeLabel("");
@@ -901,7 +957,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
       id: n.id,
       type: "dagNode",
       position: n.position,
-      data: { label: n.label, isLatent: n.isLatent || false, onDelete: deleteNode },
+      data: { label: n.label, isLatent: n.isLatent || false, onDelete: deleteNode, onRename: renameNode },
     }));
     const rfEdges: Edge[] = example.edges.map((e) => {
       const handles = inferExampleEdgeHandles(exampleNodeMap.get(e.source), exampleNodeMap.get(e.target));
