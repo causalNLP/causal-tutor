@@ -19,9 +19,17 @@ export interface MethodAnalysis {
   cited_paragraphs: CitedParagraph[];
 }
 
+export interface CausalGraph {
+  nodes: Array<{ id: string; label: string; latent?: boolean }>;
+  edges: Array<{ source: string; target: string; biasing?: boolean }>;
+}
+
 export interface CausalQueryResponse {
   paper_name: string;
   causal_query: string;
+  /** Structured DAG from the model; absent in sessions saved before it existed. */
+  causal_graph?: CausalGraph;
+  /** Built server-side from causal_graph. */
   causal_graph_mermaid: string;
   methods: MethodAnalysis[];
   alternative_methods: AlternativeMethod[];
@@ -33,6 +41,9 @@ export interface APIAnalysisResponse {
     full_text: string;
     pdf_base64?: string | null;
     pdf_filename?: string | null;
+    page_count?: number | null;
+    /** How the paper was processed if it wasn't sent whole as a PDF (text fallback, truncation). */
+    warnings?: string[];
 }
 
 // ── DAG Playground Types ─────────────────────────────────────────────────
