@@ -13,3 +13,4 @@ linearmodels>=5.4
 scikit-learn>=1.3
 numpy
 scipy
+fonttools

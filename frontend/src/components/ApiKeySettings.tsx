@@ -24,6 +24,8 @@ interface ApiKeySettingsProps {
 interface ModelOption {
   id: string;
   label: string;
+  /** False when the model can't read PDF files natively (gets extracted text instead). */
+  supports_pdf?: boolean;
 }
 
 interface ProviderConfig {
@@ -363,7 +365,14 @@ export default function ApiKeySettings({ isOpen, onClose }: ApiKeySettingsProps)
                             {inUse ? "In use" : selected ? "Selected" : "Pick"}
                           </span>
                         </div>
-                        <div className="mt-0.5 font-mono text-[10px] text-slate-400">{m.id}</div>
+                        <div className="mt-0.5 font-mono text-[10px] text-slate-400">
+                          {m.id}
+                          {m.supports_pdf === false && (
+                            <span className="ml-1.5 font-sans" title="Reads PDFs as extracted text only, so figures and image-only content are not visible">
+                              · text-only PDFs
+                            </span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}
@@ -430,9 +439,9 @@ export default function ApiKeySettings({ isOpen, onClose }: ApiKeySettingsProps)
         </div>
       )}
 
-      <p className="mt-3 text-[10px] text-slate-400 leading-relaxed">
+      {/* <p className="mt-3 text-[10px] text-slate-400 leading-relaxed">
         Your key is stored only in your browser&apos;s memory.
-      </p>
+      </p> */}
     </div>
   );
 }

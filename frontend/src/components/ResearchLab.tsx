@@ -31,6 +31,21 @@ function normalizeMath(content: string): string {
 
 const MermaidChart = dynamic(() => import("./MermaidChart"), { ssr: false });
 
+// Mirrors the backend's default MAX_PDF_UPLOAD_MB.
+const MAX_PDF_UPLOAD_MB = 50;
+
+/** User-facing message for a failed request: the backend's `detail` when present. */
+function requestErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string" && detail) return detail;
+    if (!error.response) return "Couldn't reach the server. Check your connection and try again.";
+  } else if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Sorry, I encountered an error processing your request. Please try again.";
+}
+
 // Types for History
 interface ChatMessage {
     role: "user" | "assistant";
@@ -125,7 +140,20 @@ export default function ResearchLab({
   // Save sessions to localStorage whenever they change (after hydration)
   useEffect(() => {
     if (!hydrated) return;
-    localStorage.setItem('causal_tutor_sessions', JSON.stringify(sessions));
+    // PDF bytes stay in memory only: base64 PDFs would blow past the localStorage
+    // quota. Restored sessions fall back to the extracted text for chat.
+    const withoutPdf = (data?: APIAnalysisResponse | null) =>
+      data ? { ...data, pdf_base64: undefined } : data;
+    const slim = sessions.map((s) => ({
+      ...s,
+      analysis: withoutPdf(s.analysis) ?? null,
+      messages: s.messages.map((m) => (m.data ? { ...m, data: withoutPdf(m.data) } : m)),
+    }));
+    try {
+      localStorage.setItem('causal_tutor_sessions', JSON.stringify(slim));
+    } catch (err) {
+      console.error("Failed to persist sessions:", err);
+    }
   }, [sessions, hydrated]);
 
   // Persist the active session id so we can restore it on remount (after hydration)
@@ -158,9 +186,19 @@ export default function ResearchLab({
 
   // Handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+    if (!selected.name.toLowerCase().endsWith(".pdf")) {
+      showToast("Please choose a PDF file.");
+      e.target.value = "";
+      return;
     }
+    if (selected.size > MAX_PDF_UPLOAD_MB * 1024 * 1024) {
+      showToast(`This PDF is larger than the ${MAX_PDF_UPLOAD_MB} MB upload limit.`);
+      e.target.value = "";
+      return;
+    }
+    setFile(selected);
   };
 
   const clearFile = () => {
@@ -221,6 +259,11 @@ export default function ResearchLab({
   const handleSubmit = async () => {
     if ((!input && !file) || loading) return;
 
+    // Take the file out of component state right away: the attachment chip
+    // disappears on submit, so it can't be removed mid-processing.
+    const uploadFile = file;
+    clearFile();
+
     shouldAutoScrollRef.current = true;
     setLoading(true);
     
@@ -230,7 +273,7 @@ export default function ResearchLab({
         sessionId = Date.now().toString();
         const newSession: ChatSession = {
             id: sessionId,
-            title: file ? file.name : (input.slice(0, 30) || "New Chat"),
+            title: uploadFile ? uploadFile.name : (input.slice(0, 30) || "New Chat"),
             timestamp: Date.now(),
             messages: [],
             analysis: null
@@ -241,12 +284,12 @@ export default function ResearchLab({
 
     // Determine if we need to run analysis (Upload or Scenario)
     // Rule: Run analysis if we have a file OR if we have no analysis yet and the input looks like a scenario
-    const shouldRunAnalysis = !analysis && (file || input.length > 10); 
+    const shouldRunAnalysis = !analysis && (uploadFile || input.length > 10);
     
     try {
       if (shouldRunAnalysis) {
         // --- ANALYSIS FLOW ---
-        const userDisplayMsg = file ? `Analyzing file: **${file.name}**` : input;
+        const userDisplayMsg = uploadFile ? `Analyzing file: **${uploadFile.name}**` : input;
         
         // Optimistic UI update
         const newHistory: ChatMessage[] = [...chatHistory, { role: "user", content: userDisplayMsg, type: "text" }];
@@ -254,9 +297,9 @@ export default function ResearchLab({
         setInput("");
 
         let response;
-        if (file) {
+        if (uploadFile) {
             const formData = new FormData();
-            formData.append("file", file);
+            formData.append("file", uploadFile);
             response = await axios.post<APIAnalysisResponse>(apiUrl("/analyze"), formData, {
               headers: { "Content-Type": "multipart/form-data", ...getApiHeaders() },
             });
@@ -286,12 +329,10 @@ export default function ResearchLab({
         
         // Update Session
         updateSession(sessionId, { 
-            title: analysisData.analysis.paper_name || (file ? file.name : "Scenario Analysis"),
-            messages: updatedHistory, 
-            analysis: analysisData 
+            title: analysisData.analysis.paper_name || (uploadFile ? uploadFile.name : "Scenario Analysis"),
+            messages: updatedHistory,
+            analysis: analysisData
         });
-
-        setFile(null);
 
       } else {
         // --- CHAT FLOW ---
@@ -322,11 +363,23 @@ export default function ResearchLab({
               message: userMsg,
               history: chatHistory.map(m => ({ role: m.role, content: m.content })), // Send raw content
               paper_text: analysis.full_text,
+              pdf_base64: analysis.pdf_base64,
+              pdf_filename: analysis.pdf_filename,
               analysis_context: analysisContext
             }),
         });
 
         await checkAuthResponse(response);
+        if (!response.ok) {
+          let detail = `Request failed (HTTP ${response.status}). Please try again.`;
+          try {
+            const body = await response.json();
+            if (typeof body?.detail === "string") detail = body.detail;
+          } catch {
+            /* body wasn't JSON, keep fallback */
+          }
+          throw new Error(detail);
+        }
         if (!response.body) throw new Error("No response body");
 
         const reader = response.body.getReader();
@@ -339,7 +392,7 @@ export default function ResearchLab({
         while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            const chunk = decoder.decode(value);
+            const chunk = decoder.decode(value, { stream: true });
             assistantMessage += chunk;
             
             setChatHistory(prev => {
@@ -357,7 +410,7 @@ export default function ResearchLab({
     } catch (error) {
       console.error(error);
       const authMsg = handleAuthError(error) || (error instanceof Error && (error as { status?: number }).status === 401 ? error.message : null);
-      const content = authMsg || "Sorry, I encountered an error processing your request. Please try again.";
+      const content = authMsg || requestErrorMessage(error);
       setChatHistory(prev => [...prev, { role: "assistant", content, type: "text" }]);
     } finally {
       setLoading(false);
@@ -725,6 +778,18 @@ function AnalysisReportBlock({ data }: { data: APIAnalysisResponse }) {
             {/* Collapsible Content */}
             {isOpen && (
                 <div className="animate-in slide-in-from-top-2 duration-200">
+                    {/* Processing notes: text fallback, truncation to fit the context window */}
+                    {data.warnings && data.warnings.length > 0 && (
+                        <div className="mx-6 mt-5 bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                            {data.warnings.map((w, i) => (
+                                <div key={i} className="flex items-start gap-2 text-xs text-amber-800 leading-relaxed">
+                                    <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                                    <span>{w}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Core Query */}
                     <div className="px-6 py-5">
                         <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Core Causal Query</h4>

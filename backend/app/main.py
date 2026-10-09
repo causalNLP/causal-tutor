@@ -1,12 +1,19 @@
 import os
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, NoReturn, Optional, Union
 
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from openai import APIStatusError, AuthenticationError as OpenAIAuthError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError as OpenAIAuthError,
+    RateLimitError,
+)
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from .curriculum_data import CURRICULUM_METHODS
@@ -69,11 +76,15 @@ from .scm_evaluator import (
 )
 from .scm_model import HardIntervention, SCMSchema, SoftIntervention, TraceLine
 from .services import (
+    AnalysisError,
+    PdfError,
     analyze_paper,
     chat_with_paper,
     extract_csv_schema,
     extract_text_from_pdf,
     generate_exam_questions,
+    load_pdf,
+    provider_error_message,
 )
 
 load_dotenv()
@@ -126,6 +137,81 @@ def _is_auth_error(exc: Exception) -> bool:
         return True
     status = getattr(exc, "status_code", None)
     return status in {401, 403}
+
+
+def _raise_llm_failure(exc: Exception, llm: LLMRequestContext) -> NoReturn:
+    """Turn paper-processing and LLM provider errors into actionable HTTP errors."""
+    label = provider_label(llm.provider)
+    if isinstance(exc, PdfError):
+        raise HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, AnalysisError):
+        raise HTTPException(status_code=502, detail=str(exc))
+    if _is_auth_error(exc):
+        _raise_auth_failure(llm.provider)
+    if isinstance(exc, RateLimitError):
+        raise HTTPException(
+            status_code=429,
+            detail=f"{label} rate limit or quota reached. Wait a moment and try again, or check your plan and credits.",
+        )
+    if isinstance(exc, APITimeoutError):
+        raise HTTPException(
+            status_code=504,
+            detail=f"{label} took too long to respond. Long papers can take several minutes; try again or pick a faster model.",
+        )
+    if isinstance(exc, APIConnectionError):
+        raise HTTPException(status_code=502, detail=f"Couldn't reach {label}. Check your connection and try again.")
+    if isinstance(exc, APIStatusError):
+        message = provider_error_message(exc)
+        if exc.status_code == 402:
+            raise HTTPException(status_code=402, detail=f"{label} reports insufficient credits: {message}")
+        if exc.status_code == 404:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The model '{llm.model or 'default'}' isn't available on {label}. Pick another model in the API key settings. ({message})",
+            )
+        if exc.status_code < 500:
+            raise HTTPException(status_code=400, detail=f"{label} rejected the request: {message}")
+        raise HTTPException(status_code=502, detail=f"{label} had a server error. Try again in a moment. ({message})")
+    import traceback
+
+    traceback.print_exc()
+    raise HTTPException(status_code=500, detail=str(exc))
+
+
+# Uploaded papers are held in memory and re-sent with every chat turn.
+MAX_PDF_UPLOAD_BYTES = int(os.getenv("MAX_PDF_UPLOAD_MB", "50")) * 1024 * 1024
+
+
+async def _read_pdf_upload(file: UploadFile) -> bytes:
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+    contents = await file.read(MAX_PDF_UPLOAD_BYTES + 1)
+    if len(contents) > MAX_PDF_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"This PDF is larger than the {MAX_PDF_UPLOAD_BYTES // (1024 * 1024)} MB upload limit.",
+        )
+    return contents
+
+
+def _stream_text(stream) -> StreamingResponse:
+    async def generate():
+        try:
+            async for chunk in stream:
+                # Some providers send keep-alive/usage chunks without choices.
+                if not chunk.choices:
+                    continue
+                content = chunk.choices[0].delta.content
+                if content:
+                    yield content
+        except Exception as e:
+            # Headers are already sent, so the error can only go in the body.
+            import traceback
+
+            traceback.print_exc()
+            yield f"\n\n**Error:** the response was interrupted ({str(e)[:200]}). Please try again."
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 
 def require_llm_context(
@@ -263,13 +349,15 @@ async def analyze_project_endpoint(
         if pdf_text:
             synthesis_text += f"Reference Paper Content:\n{pdf_text[:50000]}"
 
-        analysis = await analyze_paper(
-            synthesis_text,
-            "Research Design Project",
-            provider=llm.provider,
-            model=llm.model,
-            api_key=llm.api_key,
-        )
+        analysis = (
+            await analyze_paper(
+                synthesis_text,
+                "Research Design Project",
+                provider=llm.provider,
+                model=llm.model,
+                api_key=llm.api_key,
+            )
+        ).analysis
 
         return {
             "project": {
@@ -284,12 +372,7 @@ async def analyze_project_endpoint(
     except HTTPException:
         raise
     except Exception as e:
-        if _is_auth_error(e):
-            _raise_auth_failure(llm.provider)
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_failure(e, llm)
 
 
 @app.post("/analyze", response_model=APIAnalysisResponse)
@@ -297,27 +380,34 @@ async def analyze_endpoint(
     file: UploadFile = File(...),
     llm: LLMRequestContext = Depends(require_llm_context),
 ):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="File must be a PDF")
+    contents = await _read_pdf_upload(file)
     try:
-        text = await extract_text_from_pdf(file)
-        analysis = await analyze_paper(
-            text,
+        # Validates the PDF and extracts its text. The text is the fallback for
+        # models without native PDF input (or PDFs over their limits), and for chat
+        # once the PDF bytes are gone from the browser (they aren't persisted).
+        document = await run_in_threadpool(load_pdf, contents, file.filename)
+        result = await analyze_paper(
+            "",
             file.filename,
             provider=llm.provider,
             model=llm.model,
             api_key=llm.api_key,
+            document=document,
         )
-        return APIAnalysisResponse(analysis=analysis, full_text=text)
+        return APIAnalysisResponse(
+            analysis=result.analysis,
+            full_text=document.full_text,
+            pdf_base64=document.pdf_base64,
+            pdf_filename=file.filename,
+            page_count=document.page_count,
+            warnings=result.warnings,
+        )
     except HTTPException:
         raise
     except Exception as e:
-        if _is_auth_error(e):
-            _raise_auth_failure(llm.provider)
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_failure(e, llm)
+    finally:
+        await file.close()
 
 
 @app.post("/analyze-scenario", response_model=APIAnalysisResponse)
@@ -326,29 +416,26 @@ async def analyze_scenario_endpoint(
     llm: LLMRequestContext = Depends(require_llm_context),
 ):
     try:
-        analysis = await analyze_paper(
+        result = await analyze_paper(
             request.text,
             request.scenario_name,
             provider=llm.provider,
             model=llm.model,
             api_key=llm.api_key,
         )
-        return APIAnalysisResponse(analysis=analysis, full_text=request.text)
+        return APIAnalysisResponse(analysis=result.analysis, full_text=request.text, warnings=result.warnings)
     except HTTPException:
         raise
     except Exception as e:
-        if _is_auth_error(e):
-            _raise_auth_failure(llm.provider)
-        import traceback
-
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        _raise_llm_failure(e, llm)
 
 
 class ChatInput(BaseModel):
     message: str
     history: List[dict]
-    paper_text: str
+    paper_text: str = ""
+    pdf_base64: Optional[str] = None
+    pdf_filename: Optional[str] = None
     analysis_context: Optional[str] = None
 
 
@@ -366,24 +453,15 @@ async def chat_endpoint(
             model=llm.model,
             provider=llm.provider,
             api_key=llm.api_key,
+            pdf_base64=request.pdf_base64,
+            pdf_filename=request.pdf_filename,
         )
     except HTTPException:
         raise
     except Exception as e:
-        if _is_auth_error(e):
-            _raise_auth_failure(llm.provider)
-        import traceback
+        _raise_llm_failure(e, llm)
 
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-    async def generate():
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return _stream_text(stream)
 
 
 @app.post("/dag/validate", response_model=DAGValidateResponse)
@@ -485,13 +563,7 @@ async def dag_chat(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-    async def generate():
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return _stream_text(stream)
 
 
 @app.get("/sandbox/queries", response_model=QueriesResponse)
@@ -553,13 +625,7 @@ async def sandbox_interpret(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-    async def generate():
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return _stream_text(stream)
 
 
 # --- SCM endpoints ---
@@ -757,10 +823,4 @@ async def scm_chat(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-    async def generate():
-        async for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
-
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return _stream_text(stream)

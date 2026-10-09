@@ -1,5 +1,6 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
+from pydantic.json_schema import SkipJsonSchema
 
 class CitedParagraph(BaseModel):
     page: int
@@ -19,10 +20,27 @@ class MethodAnalysis(BaseModel):
     result_justification_summary: str = Field(description="Summary of the causal results and their robustness")
     cited_paragraphs: List[CitedParagraph] = Field(description="List of paragraphs from the text supporting the analysis")
 
+class GraphNode(BaseModel):
+    id: str = Field(description="Short unique identifier, e.g. 'D', 'Y', 'Z', 'U1'")
+    label: str = Field(description="Human-readable variable name, e.g. 'Minimum wage increase'")
+    latent: bool = Field(default=False, description="True for unobserved/latent variables (e.g. unobserved confounders)")
+
+class GraphEdge(BaseModel):
+    source: str = Field(description="id of the cause node")
+    target: str = Field(description="id of the effect node")
+    biasing: bool = Field(default=False, description="True for biasing paths (e.g. confounding), drawn dashed")
+
+class CausalGraph(BaseModel):
+    nodes: List[GraphNode]
+    edges: List[GraphEdge]
+
 class CausalQueryResponse(BaseModel):
     paper_name: str
     causal_query: str = Field(description="The core causal question being investigated")
-    causal_graph_mermaid: str = Field(description="Mermaid.js graph definition. Use 'graph LR'. Represent unobserved confounders with dashed styles.")
+    causal_graph: CausalGraph = Field(description="Causal DAG of the identification strategy (e.g. for IV: Z -> D -> Y, with a latent U -> D and U -> Y)")
+    # Built from `causal_graph` (see services.causal_graph_to_mermaid) rather than
+    # written by the model: LLM-written Mermaid is often syntactically invalid.
+    causal_graph_mermaid: SkipJsonSchema[str] = ""
     methods: List[MethodAnalysis] = Field(description="List of methods identified and analyzed in the paper")
     alternative_methods: List[AlternativeMethod] = Field(description="List of 2-3 alternative methods that could be applicable to this research question")
     suggested_questions: List[str] = Field(description="3-4 educational follow-up questions for a student")
@@ -51,6 +69,14 @@ class ExamResponse(BaseModel):
 class APIAnalysisResponse(BaseModel):
     analysis: CausalQueryResponse
     full_text: str
+    # Set for PDF uploads: the original file, so follow-up chat turns can pass it
+    # straight to the LLM instead of re-using extracted text.
+    pdf_base64: Optional[str] = None
+    pdf_filename: Optional[str] = None
+    page_count: Optional[int] = None
+    # How the paper was processed when it wasn't sent whole as a PDF, e.g. text
+    # fallback or truncation to fit the context window. Shown to the user.
+    warnings: List[str] = []
 
 class AnalyzeTextRequest(BaseModel):
     text: str
