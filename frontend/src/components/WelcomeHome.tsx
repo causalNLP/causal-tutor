@@ -34,13 +34,13 @@ const FEATURES: FeatureCard[] = [
     title: "Curriculum",
     pill: "Beginner · ~3 hours",
     description:
-      "Start with a primer on causality, then 10 short lessons on DAGs, confounders, IV, RDD, matching, and more — each followed by an adaptive quiz.",
+      "Start with the foundations of causality, then 10 short lessons on DAGs, confounders, IV, RDD, matching, and more — each followed by an adaptive quiz.",
     icon: BookOpen,
     iconBg: "bg-emerald-50",
     iconText: "text-emerald-700",
     pillBg: "bg-emerald-50",
     pillText: "text-emerald-700",
-    chips: ["Primer first", "10 lessons", "Adaptive exams"],
+    chips: ["Foundations", "10 lessons", "Adaptive exams"],
     cta: "Open curriculum",
   },
   {
@@ -112,7 +112,7 @@ interface StartPath {
 const START_PATHS: StartPath[] = [
   {
     title: "New to causality",
-    description: "Start with the primer, then the curriculum, to learn the language.",
+    description: "Start with the foundations, then the curriculum, to learn the language.",
     icon: Sprout,
     iconColor: "text-emerald-700",
     mode: "curriculum",
@@ -586,7 +586,7 @@ export default function WelcomeHome({ onNavigate }: WelcomeHomeProps) {
                 onClick={() => onNavigate("curriculum")}
                 className="inline-flex items-center gap-1.5 bg-slate-900 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-black transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300"
               >
-                Start with a primer on causality
+                Start with the foundations of causality
                 <ArrowRight size={16} />
               </button>
             </div>

@@ -427,7 +427,7 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
                         <BookOpen className="text-indigo-600 flex-shrink-0" size={24} />
                         <h1 className="text-2xl font-bold text-slate-900 truncate">Causality Curriculum</h1>
                     </div>
-                    <p className="text-slate-500 truncate">Start with the primer, then master the 10 core methods of causal inference through theory and interactive exams.</p>
+                    <p className="text-slate-500 truncate">Start with the foundations, then master the 10 core methods of causal inference through theory and interactive exams.</p>
                 </div>
 
                 <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 flex-shrink-0">
@@ -461,14 +461,14 @@ export default function CurriculumDashboard({ onContextChange, onChatLockedChang
                             <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5 bg-sky-100 text-sky-600 shadow-inner">
                                 <GraduationCap size={20} />
                             </div>
-                            <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-sky-700 transition-colors">Primer</h3>
+                            <h3 className="text-lg font-bold text-slate-900 mb-2 group-hover:text-sky-700 transition-colors">Foundations</h3>
                             <p className="text-sm text-slate-500 mb-6 leading-relaxed flex-1">
-                                New to causality? Start with a short primer on causality: DAGs, confounders, colliders, d-separation, Pearl's ladder, and more.
+                                New to causality? Start with a short introduction to the foundations of causality: DAGs, confounders, colliders, d-separation, Pearl's ladder, and more.
                             </p>
                             <div className="mt-auto pt-4 border-t border-sky-100">
                                 <div className={`${compactCards ? "py-1.5 text-xs gap-1.5" : "py-2.5 text-sm gap-2"} rounded-xl bg-sky-600 text-white font-bold flex items-center justify-center whitespace-nowrap`}>
                                     <GraduationCap size={compactCards ? 14 : 16} />
-                                    Start Primer
+                                    Start Foundations
                                 </div>
                             </div>
                         </div>

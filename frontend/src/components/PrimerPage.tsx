@@ -561,7 +561,7 @@ export default function PrimerPage({ onBack }: { onBack?: () => void }) {
   if (sections.length === 0) {
     return (
       <div className="h-full flex items-center justify-center text-slate-400" style={{ background: "#F7F7F5" }}>
-        No primer sections available.
+        No foundations sections available.
       </div>
     );
   }
