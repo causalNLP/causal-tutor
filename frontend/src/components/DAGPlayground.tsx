@@ -1861,7 +1861,7 @@ export default function DAGPlayground({ onContextChange }: DAGPlaygroundProps = 
                         <div key={`${path.join("-")}-${pathIndex}`} className="rounded-xl border border-rose-100 bg-white p-3 shadow-sm">
                           <div className="mb-2 flex items-center gap-2">
                             <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-700">
-                              Open path {pathIndex + 1}
+                              Active path {pathIndex + 1}
                             </span>
                             <span className="text-[11px] text-slate-400">{path.length} nodes</span>
                           </div>
